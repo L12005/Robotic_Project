@@ -1,0 +1,9 @@
+std_msgs/Header header
+string actor_id
+string actor_type
+float32 x
+float32 y
+float32 yaw
+float32 linear_x
+float32 angular_z
+bool is_moving
