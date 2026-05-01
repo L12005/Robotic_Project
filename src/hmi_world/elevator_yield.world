@@ -1,0 +1,279 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <world name="elevator_yield">
+    <gravity>0 0 -9.8</gravity>
+
+    <scene>
+      <ambient>0.80 0.80 0.80 1</ambient>
+      <background>0.95 0.96 0.97 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.25 0.10 -0.95</direction>
+    </light>
+
+    <model name="scene_floor">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>0 0 -0.03 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>10 10 0.06</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <pose>0 0 -0.03 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>10 10 0.06</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.88 0.88 0.86 1</ambient>
+            <diffuse>0.93 0.93 0.90 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Open-source robot model from ROBOTIS TurtleBot3 simulations -->
+    <model name="turtlebot3_burger_ir_1">
+      <include>
+        <uri>model://turtlebot3_burger_ir</uri>
+        <pose>0.00 0.15 0.012 0 0 1.570796</pose>
+        <static>true</static>
+      </include>
+    </model>
+
+    <model name="elevator_car">
+      <include>
+        <uri>model://aws_robomaker_hospital_elevator_01_car</uri>
+        <pose>0 1.65 0.19 0 0 0</pose>
+      </include>
+    </model>
+
+    <model name="elevator_portal">
+      <include>
+        <uri>model://aws_robomaker_hospital_elevator_01_portal</uri>
+        <pose>0 1.78 0.19 0 0 0</pose>
+      </include>
+    </model>
+
+    <!-- Two wall panels sit on the same plane as the elevator sliding door. -->
+    <model name="left_door_side_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>-1.57 1.74 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.50 0.22 2.90</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <pose>-1.57 1.74 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.50 0.22 2.90</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.82 0.83 0.85 1</ambient>
+            <diffuse>0.88 0.89 0.91 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="right_door_side_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>1.57 1.74 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.50 0.22 2.90</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <pose>1.57 1.74 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.50 0.22 2.90</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.82 0.83 0.85 1</ambient>
+            <diffuse>0.88 0.89 0.91 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!--
+      Final human actor pose approved from the draggable review marker.
+      The mesh is meter-based and its root is near the body center, so the
+      actor pose z stays almost identical to the marker center height.
+    -->
+    <actor name="human_in_elevator">
+      <pose>0.000004 3.219430 1.174502 0 0 -1.556373</pose>
+      <skin>
+        <filename>model://human_actor/meshes/walk.dae</filename>
+        <scale>1.0 1.0 1.0</scale>
+      </skin>
+      <animation name="walk_cycle">
+        <filename>model://human_actor/meshes/walk.dae</filename>
+        <scale>1.0</scale>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>false</loop>
+        <delay_start>0.0</delay_start>
+        <auto_start>false</auto_start>
+        <trajectory id="0" type="walk_cycle">
+          <waypoint>
+            <time>0.0</time>
+            <pose>0 0 0 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>4.0</time>
+            <pose>0 0 0 0 0 0</pose>
+          </waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <!--
+      Hidden collision proxy for obstacle handling.
+      This stays aligned with the human while the actor is static.
+    -->
+    <model name="human_collision_proxy">
+      <static>true</static>
+      <pose>0.000004 3.219430 0.960000 0 0 -1.556373</pose>
+      <link name="collision_link">
+        <collision name="body_collision">
+          <geometry>
+            <box>
+              <size>0.95 0.60 1.72</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="debug_visual">
+          <geometry>
+            <box>
+              <size>0.95 0.60 1.72</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.8 0.2 0.35</ambient>
+            <diffuse>0.2 0.8 0.2 0.35</diffuse>
+          </material>
+          <transparency>0.65</transparency>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Corridor walls attach to the outer sides of the two door-side wall panels. -->
+    <model name="left_corridor_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>-2.43 -2.75 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.22 9.00 2.90</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <pose>-2.43 -2.75 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.22 9.00 2.90</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.82 0.83 0.85 1</ambient>
+            <diffuse>0.88 0.89 0.91 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="right_corridor_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>2.43 -2.75 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.22 9.00 2.90</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <pose>2.43 -2.75 1.45 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.22 9.00 2.90</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.82 0.83 0.85 1</ambient>
+            <diffuse>0.88 0.89 0.91 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Static obstacle behind the robot, about 3 m away from the elevator door plane. -->
+    <model name="rear_obstacle">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>1.77 -1.26 0.75 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.10 0.55 1.50</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <pose>1.77 -1.26 0.75 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>1.10 0.55 1.50</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.66 0.56 0.46 1</ambient>
+            <diffuse>0.74 0.64 0.54 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <gui fullscreen="0">
+      <camera name="user_camera">
+        <pose>-3.9 -4.6 3.1 0 0.36 0.94</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+  </world>
+</sdf>

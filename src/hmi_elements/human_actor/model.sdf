@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="human_actor">
+    <static>true</static>
+    <link name="placeholder_link">
+      <visual name="placeholder_visual">
+        <pose>0 0 -10 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.01 0.01 0.01</size>
+          </box>
+        </geometry>
+        <transparency>1.0</transparency>
+      </visual>
+    </link>
+  </model>
+</sdf>

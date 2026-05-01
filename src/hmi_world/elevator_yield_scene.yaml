@@ -1,0 +1,41 @@
+scene_name: elevator_yield
+description: >
+  Minimal static elevator scene containing only an elevator, one person,
+  one robot, two door-side walls, and a floor plane. There is no ceiling,
+  no dynamic motion, and no control logic in the scene itself.
+
+models:
+  robot:
+    name: turtlebot3_burger_ir
+    pose: [0.00, 0.15, 0.012, 0.0, 0.0, 1.570796]
+  human:
+    name: human_in_elevator
+    mesh_source: human_actor/meshes/walk.dae
+    pose: [0.000004, 3.219430, 1.174502, 0.0, 0.0, -1.556373]
+  elevator_assets:
+    - aws_robomaker_hospital_elevator_01_car
+    - aws_robomaker_hospital_elevator_01_portal
+  walls:
+    - name: left_door_side_wall
+      pose: [-1.57, 1.74, 0.0, 0.0, 0.0, 0.0]
+    - name: right_door_side_wall
+      pose: [1.57, 1.74, 0.0, 0.0, 0.0, 0.0]
+    - name: left_corridor_wall
+      pose: [-2.43, -2.75, 0.0, 0.0, 0.0, 0.0]
+    - name: right_corridor_wall
+      pose: [2.43, -2.75, 0.0, 0.0, 0.0, 0.0]
+  obstacles:
+    - name: human_collision_proxy
+      pose: [0.000004, 3.219430, 0.960000, 0.0, 0.0, -1.556373]
+      size: [0.95, 0.60, 1.72]
+    - name: rear_obstacle
+      pose: [1.77, -1.26, 0.0, 0.0, 0.0, 0.0]
+      size: [1.10, 0.55, 1.50]
+  upstream_sources:
+    robot: https://github.com/ROBOTIS-GIT/turtlebot3_simulations
+    human_actor_mesh: local human_actor/meshes/walk.dae
+
+notes:
+  - The scene is intentionally static and contains no motion or behavior control.
+  - The two wall panels are coplanar with the elevator sliding door.
+  - The clear spacing between the two wall inner faces is about 1.64 m.
