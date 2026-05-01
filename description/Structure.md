@@ -65,41 +65,35 @@ Gazebo: Harmonic (LTS)
   - 自定义消息接口
 状态机定义（待定）
 协作 GPT 链接：https://chatgpt.com/share/69ef696e-1484-83a9-afe8-44d5e0e067d3
+V2
+基础参数定义：视行人自身加正前方 v*t 长度矩形为不可通行区域， v*t_2 退出区域
+公共条件：当与行人的距离小于安全半径则 Wait
+重要假设：小车速度大于行人，这个系统才能正常运行
 - Idle
-  - 接收到任务 -> Navigate
-- Navigate
-  - 机器人正常前往目标点
-  - 检测到冲突 -> ConflictAssess
-- ConflictAssess
-  - 无冲突/可继续前行 -> Navigate
-  - 需要让行 -> YieldExecute
-  - 暂时无法做出安全动作 -> YieldWait
-- YieldExecute
-  - If scene_type = elevator
-    - -> ElevatorYield
-  - If scene_type = open_area
-    - -> OpenAreaYield
-- ElevatorYield
-  - 选择电梯门左侧等待区
-  - 退让到等待区
-  - -> YieldVerify
-- OpenAreaYield
-  - 暂停并开始检测
-    - 若行人持续逼近
-      - 右侧可用 -> 右让
-      - 左侧可用 -> 左让
-      - 否则 -> 后退/等待（等待最为安全）
-- YieldVerify
-  - 成功让出 -> YieldWait
-  - 未成功解决 -> YieldExecute
-  - 切换环境 -> ConflictAssess
-- YieldWait
-  - If scene_type = elevator
-    - 电梯前矩形区域清空 -> Navigate
-  - If scene_type = open_area
-    - 以机器人为几何中心的矩形区域清空 -> Navigate
-接口定义
+  - 未抵达目标点 -> Navigate
+- Navigate （瞬间状态，寻找到达目标点的路径）
+  - 路径可达 -> Forward
+  - 路径不可达 -> Wait
+  - 自身处于行人行进区域内  -> Conflict Avoiding Navigate
+- Forward （前往目标点）
+  - 原先路径不通或自身处于行人行进区域内 -> Navigate
+  - 抵达目标点 -> Idle
+- Conflict Avoiding Navigate （瞬间状态，寻找临时避障目标点并规划路径）
+  - 若寻找到 -> Conflict Avoid
+    - 方法待定
+    - 一种可能方法时搜索自身周围固定半径一个圆上可达但离行人/多个行人最远的位置
+  - 若未找到 -> Wait
+- Conflict Avoid 寻路到临时避障目标点
+  - 抵达后
+    - 在退出区域内 -> Conflict Avoiding Navigate
+    - 若不在退出区域内 -> Navigate
+  - 当前路径不通 -> Conflict Avoiding Navigate
+- Wait （等待）
+  - 1s 后 -> Idle
+
+接口定义与作用
 ROS 接口与数据结构
+
 - ActorState.msg：
   - std_msgs/Header header 时间戳
   - string actor_id
@@ -110,6 +104,7 @@ ROS 接口与数据结构
   - float32 linear_x
   - float32 angular_z
   - bool is_moving 判断目标是否静止
+
 - ObstacleState.msg：
   - std_msgs/Header header
   - string obstacle_id
@@ -118,6 +113,7 @@ ROS 接口与数据结构
   - float32 width
   - float32 length
   - bool is_static 目前默认true
+
 - BehaviorState.msg：
   - std_msgs/Header header
   - string current_state
@@ -126,6 +122,49 @@ ROS 接口与数据结构
     - human_close / obstacle_back / human_passed
   - float32 target_linear_x
   - float32 target_angular_z
+
+- nav_msgs/OccupancyGrid
+
+1. OccupancyGrid 怎么用
+  /hmi/scene/static_map 里放：
+  墙体
+  固定障碍物
+  已经按机器人 footprint + 安全边距膨胀后的静态障碍
+  A* 直接在这张图上跑。这样 A* 不需要再考虑机器人长宽，也不要再对静态障碍重复膨胀。
+
+2. ActorState 怎么用
+  这个接口主要给“机器人”和“人”用。
+  机器人 ActorState：
+  x, y：A* 的起点
+  yaw：路径跟踪时决定朝向控制
+  linear_x, angular_z：调试用，或者判断机器人是否真的停下/在后退
+  is_moving：可用于状态机确认“机器人是否已经停稳”
+  
+  （人）ActorState：
+  x, y：做人机冲突检测
+  yaw：确定“人前方禁行区”的方向
+  linear_x：不用做动力学预测，但可以用来判断人是静止还是在前进
+  is_moving：决定是继续等待还是准备恢复
+  最关键的是：
+  人不要写进 static_map，而是根据 ActorState 在运行时生成一层临时禁行区。
+    可以在控制侧临时构造：
+    人当前位置附近一个安全圆/矩形
+    人朝向前方一段矩形禁行区/退出区域，然后把这层叠加到 static_map 的副本上，再跑 A*。
+
+3. ObstacleState 怎么用
+
+  x, y, width, length 用来在运行时往地图上叠加障碍块
+  叠加时也要做同样的安全膨胀
+  然后再跑 A*
+  永久静态障碍：进 OccupancyGrid
+  临时/可变障碍：走 ObstacleState
+
+4. BehaviorState 怎么用
+  这个不是规划输入，而是控制输出。
+  它的作用是：
+  给录屏、调试、可视化看当前行为
+   告诉外部系统机器人当前为什么停、为什么退、什么时候恢复
+
 话题流向
 - /hmi/scene/robot_state
   - 发布方：场景/仿真同学
@@ -134,11 +173,11 @@ ROS 接口与数据结构
 - /hmi/scene/human_state
   - 发布方：场景/仿真同学
   - 订阅方：控制同学
-  - 用途：把人当前位置和速度发送给状态机
-- /hmi/scene/obstacle_state
-  - 发布方：场景/仿真同学
-  - 订阅方：控制同学
   - 用途：把后方静态障碍物的位置发送给状态机，供后退避障判断
+- /hmi/scene/map_state
+  - 发布方：场景同学
+  - 订阅方：控制同学
+  - 用途：低频发布地图信息给状态机，以供路径规划
 - /hmi/control/cmd_vel
   - 发布方：控制同学
   - 订阅方：机器人底盘/仿真执行侧
@@ -147,6 +186,7 @@ ROS 接口与数据结构
   - 发布方：控制同学
   - 订阅方：集成同学、文档同学、后续可视化同学
   - 用途：输出当前状态机状态，便于调试和录屏展示
+
 包编译方式：
   - 接口包：ament_cmake
   - 功能包：ament_python
