@@ -7,9 +7,11 @@ description: >
 models:
   robot:
     name: turtlebot3_burger_ir
+    entity_name: turtlebot3_burger_ir
     pose: [0.00, 0.15, 0.012, 0.0, 0.0, 1.570796]
   human:
     name: human_in_elevator
+    entity_name: human_collision_proxy
     mesh_source: human_actor/meshes/walk.dae
     pose: [0.000004, 3.219430, 1.174502, 0.0, 0.0, -1.556373]
   elevator_assets:
@@ -26,9 +28,11 @@ models:
       pose: [2.43, -2.75, 0.0, 0.0, 0.0, 0.0]
   obstacles:
     - name: human_collision_proxy
+      entity_name: human_collision_proxy
       pose: [0.000004, 3.219430, 0.960000, 0.0, 0.0, -1.556373]
       size: [0.95, 0.60, 1.72]
     - name: rear_obstacle
+      entity_name: rear_obstacle
       pose: [1.77, -1.26, 0.0, 0.0, 0.0, 0.0]
       size: [1.10, 0.55, 1.50]
   upstream_sources:
