@@ -37,18 +37,19 @@ HMI Objective
 - THEN 机器人只能向左边让开
 建筑拐角（可做可不做）
 - WHEN 建筑拐角走廊，人需要先过，遇到人靠近，机器人优先后退让人的场景
+
 技术方案
-技术栈
-Ubuntu: 24.04 (Noble)
-ROS2: Jazzy
-Gazebo: Harmonic (LTS)
-系统架构
-模块定义（文件 base）
+  技术栈
+  Ubuntu: 24.04 (Noble)
+  ROS2: Jazzy
+  Gazebo: Harmonic (LTS)
+
+模块定义（按功能包划分）
 - hmi_behavior:
   - behavior 订阅topic、启动状态机、定时循环
   - state_machine 状态机 
   - scene_classifier 识别场景 
-  - confilict_detector 判断是否存在冲突
+  - conflict_detector 判断是否存在冲突
   - robot_state 对机器人状态进行统一整理
     - 机器人的位置、朝向、速度
     - 人的位置、速度
@@ -80,8 +81,7 @@ V2
   - 抵达目标点 -> Idle
 - Conflict Avoiding Navigate （瞬间状态，寻找临时避障目标点并规划路径）
   - 若寻找到 -> Conflict Avoid
-    - 方法待定
-    - 一种可能方法时搜索自身周围固定半径一个圆上可达但离行人/多个行人最远的位置
+    - 方法为搜索自身周围固定半径一个圆上可达但离行人/多个行人最远的位置
   - 若未找到 -> Wait
 - Conflict Avoid 寻路到临时避障目标点
   - 抵达后
@@ -161,11 +161,9 @@ ROS 接口与数据结构
 
 4. BehaviorState 怎么用
   这个不是规划输入，而是控制输出。
-  它的作用是：
-  给录屏、调试、可视化看当前行为
-   告诉外部系统机器人当前为什么停、为什么退、什么时候恢复
+  它用于向录屏、调试、可视化和外部系统说明机器人当前为什么停、为什么退、什么时候恢复。
 
-5. OccpupancyGrid：
+5. OccupancyGrid：
   用于地图定义
   该接口由官方包nav_msgs引入
   规范： 20格/m

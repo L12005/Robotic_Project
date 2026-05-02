@@ -11,15 +11,24 @@ class MapStateMonitor(Node):
         self.create_subscription(
             OccupancyGrid,
             '/hmi/scene/map_state',
-            self._callback,
+            self._map_state_callback,
+            10,
+        )
+        self.create_subscription(
+            OccupancyGrid,
+            '/hmi/scene/static_map',
+            self._static_map_callback,
             10,
         )
         self.get_logger().info(
-            'Monitoring /hmi/scene/map_state as OccupancyGrid for planning map validation.'
+            'Monitoring /hmi/scene/map_state and /hmi/scene/static_map as OccupancyGrid for planning map validation.'
         )
 
-    def _callback(self, msg: OccupancyGrid) -> None:
+    def _map_state_callback(self, msg: OccupancyGrid) -> None:
         self.get_logger().info(f'map_state {summarize_occupancy_grid(msg)}')
+
+    def _static_map_callback(self, msg: OccupancyGrid) -> None:
+        self.get_logger().info(f'static_map {summarize_occupancy_grid(msg)}')
 
 
 def main(args=None) -> None:
