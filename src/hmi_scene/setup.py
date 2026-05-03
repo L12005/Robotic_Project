@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'actor_forward_test_controller = hmi_scene.actor_forward_test_controller:main',
+            'human_motion_controller = hmi_scene.actor_forward_test_controller:main',
             'scene_state_publisher = hmi_scene.scene_state_publisher:main',
         ],
     },

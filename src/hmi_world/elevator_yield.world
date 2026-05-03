@@ -126,39 +126,91 @@
     </model>
 
     <!--
-      Final human actor pose approved from the draggable review marker.
-      The mesh is meter-based and its root is near the body center, so the
-      actor pose z stays almost identical to the marker center height.
+      Visible human mesh used only for rendering.
+      Motion is driven externally so it stays stable in Gazebo Harmonic.
     -->
-    <actor name="human_in_elevator">
-      <pose>0.000004 3.219430 1.174502 0 0 -1.556373</pose>
-      <skin>
-        <filename>model://human_actor/meshes/walk.dae</filename>
-        <scale>1.0</scale>
-      </skin>
-      <animation name="walk">
-        <filename>model://human_actor/meshes/walk.dae</filename>
-      </animation>
-      <script>
-        <loop>false</loop>
-        <delay_start>0.0</delay_start>
-        <auto_start>true</auto_start>
-        <trajectory id="0" type="walk" tension="1.0">
-          <waypoint>
-            <time>0.0</time>
-            <pose>0 0 0 0 0 0</pose>
-          </waypoint>
-          <waypoint>
-            <time>6.0</time>
-            <pose>2.0 0 0 0 0 0</pose>
-          </waypoint>
-          <waypoint>
-            <time>18.0</time>
-            <pose>6.2 0 0 0 0 0</pose>
-          </waypoint>
-        </trajectory>
-      </script>
-    </actor>
+    <model name="human_in_elevator">
+      <static>true</static>
+      <pose>0.000004 3.219430 0.474502 0 0 -1.556373</pose>
+      <link name="body_link">
+        <visual name="torso_visual">
+          <pose>0 0 0.56 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.34 0.22 0.62</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.18 0.44 0.74 1</ambient>
+            <diffuse>0.24 0.52 0.80 1</diffuse>
+          </material>
+        </visual>
+        <visual name="head_visual">
+          <pose>0 0 1.07 0 0 0</pose>
+          <geometry>
+            <sphere>
+              <radius>0.11</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>0.86 0.73 0.63 1</ambient>
+            <diffuse>0.90 0.78 0.68 1</diffuse>
+          </material>
+        </visual>
+        <visual name="left_leg_visual">
+          <pose>0 0.07 0.20 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.055</radius>
+              <length>0.76</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.14 0.16 0.20 1</ambient>
+            <diffuse>0.18 0.20 0.26 1</diffuse>
+          </material>
+        </visual>
+        <visual name="right_leg_visual">
+          <pose>0 -0.07 0.20 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.055</radius>
+              <length>0.76</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.14 0.16 0.20 1</ambient>
+            <diffuse>0.18 0.20 0.26 1</diffuse>
+          </material>
+        </visual>
+        <visual name="left_arm_visual">
+          <pose>0 0.19 0.58 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.04</radius>
+              <length>0.56</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.86 0.73 0.63 1</ambient>
+            <diffuse>0.90 0.78 0.68 1</diffuse>
+          </material>
+        </visual>
+        <visual name="right_arm_visual">
+          <pose>0 -0.19 0.58 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.04</radius>
+              <length>0.56</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.86 0.73 0.63 1</ambient>
+            <diffuse>0.90 0.78 0.68 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
 
     <!--
       Hidden collision proxy for obstacle handling.

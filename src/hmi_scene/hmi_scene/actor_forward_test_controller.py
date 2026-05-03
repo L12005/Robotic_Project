@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+import json
 import math
 import subprocess
-import time
+import threading
 from pathlib import Path
 from typing import Any
 
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import Quaternion
+from ros_gz_interfaces.msg import Entity
+from ros_gz_interfaces.srv import SetEntityPose
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 
 
 class ActorForwardTestController(Node):
     def __init__(self) -> None:
-        super().__init__('actor_forward_test_controller')
+        super().__init__('human_motion_controller')
 
         default_scene_config = str(
             Path(get_package_share_directory('hmi_scene')) / 'elevator_yield_scene.yaml'
@@ -34,57 +40,76 @@ class ActorForwardTestController(Node):
                 ParameterDescriptor(description='Gazebo world name used for set_pose requests.'),
             ).value
         )
-        self._actor_entity_name = str(
+        self._visual_entity_name = str(
             self.declare_parameter(
-                'actor_entity_name',
+                'visual_entity_name',
                 'human_in_elevator',
-                ParameterDescriptor(description='Gazebo actor entity to move forward for the minimal motion test.'),
+                ParameterDescriptor(description='Gazebo visual human entity that should move forward at a constant speed.'),
+            ).value
+        )
+        self._collision_entity_name = str(
+            self.declare_parameter(
+                'collision_entity_name',
+                'human_collision_proxy',
+                ParameterDescriptor(description='Gazebo collision proxy entity that should stay aligned with the visible human.'),
             ).value
         )
         self._linear_speed = float(
             self.declare_parameter(
                 'linear_speed',
                 0.30,
-                ParameterDescriptor(description='Forward speed in meters per second for the minimal actor motion test.'),
+                ParameterDescriptor(description='Forward speed in meters per second for the moving human test.'),
             ).value
         )
         self._travel_distance = float(
             self.declare_parameter(
                 'travel_distance',
                 6.20,
-                ParameterDescriptor(description='Total forward travel distance in meters for the minimal actor motion test.'),
+                ParameterDescriptor(description='Total forward travel distance in meters for the moving human test.'),
             ).value
         )
         self._start_delay_sec = float(
             self.declare_parameter(
                 'start_delay_sec',
-                1.0,
-                ParameterDescriptor(description='Delay before the actor starts moving so Gazebo has time to finish loading.'),
+                0.0,
+                ParameterDescriptor(description='Delay in simulation seconds after pressing play before the human starts moving.'),
             ).value
         )
         update_rate_hz = float(
             self.declare_parameter(
                 'update_rate_hz',
-                10.0,
-                ParameterDescriptor(description='Update rate for sending actor set_pose commands.'),
+                60.0,
+                ParameterDescriptor(description='Update rate for sending human set_pose commands.'),
             ).value
         )
 
-        self._start_x, self._start_y, self._start_z, self._start_yaw = self._load_human_pose(scene_config_path)
+        self._start_x, self._start_y, self._visual_z, self._start_yaw, self._collision_z = self._load_scene_poses(scene_config_path)
         self._set_pose_service = f'/world/{self._world_name}/set_pose'
-        self._launch_wall_time = time.monotonic()
-        self._last_motion_wall_time: float | None = None
+        self._stats_topic = f'/world/{self._world_name}/stats'
+        self._set_pose_client = self.create_client(SetEntityPose, self._set_pose_service)
+        self._pending_pose_futures: list[Any] = []
+        self._warned_service_unavailable = False
+        self._stats_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._stats_reader_process: subprocess.Popen[str] | None = None
+        self._stats_reader_thread = threading.Thread(target=self._run_stats_reader, daemon=True)
+        self._stats_reader_thread.start()
+        self._simulation_started = False
+        self._motion_start_sim_time: float | None = None
+        self._latest_sim_time_sec: float | None = None
+        self._last_motion_sim_time: float | None = None
         self._travelled_distance = 0.0
         self._completed = False
 
         self.create_timer(1.0 / update_rate_hz, self._update_motion)
         self.get_logger().info(
-            'Actor forward test controller is ready. '
-            f'Actor: {self._actor_entity_name}, speed: {self._linear_speed:.2f} m/s, '
+            'Human motion controller is ready. '
+            f'Visual entity: {self._visual_entity_name}, collision entity: {self._collision_entity_name}, '
+            f'speed: {self._linear_speed:.2f} m/s, '
             f'distance: {self._travel_distance:.2f} m.'
         )
 
-    def _load_human_pose(self, scene_config_path: Path) -> tuple[float, float, float, float]:
+    def _load_scene_poses(self, scene_config_path: Path) -> tuple[float, float, float, float, float]:
         if not scene_config_path.is_file():
             raise FileNotFoundError(f'Scene config not found: {scene_config_path}')
 
@@ -97,72 +122,203 @@ class ActorForwardTestController(Node):
         human = models.get('human', {})
         if not isinstance(human, dict):
             raise ValueError('models.human must be a mapping in the scene config.')
-        pose = human.get('pose', [])
-        if not isinstance(pose, list) or len(pose) < 6:
+        human_pose = human.get('pose', [])
+        if not isinstance(human_pose, list) or len(human_pose) < 6:
             raise ValueError('models.human.pose must contain [x, y, z, roll, pitch, yaw].')
-        return float(pose[0]), float(pose[1]), float(pose[2]), float(pose[5])
+
+        obstacles = models.get('obstacles', [])
+        if not isinstance(obstacles, list):
+            raise ValueError('models.obstacles must be a list in the scene config.')
+
+        collision_pose: list[Any] | None = None
+        for obstacle in obstacles:
+            if not isinstance(obstacle, dict):
+                continue
+            entity_name = str(obstacle.get('entity_name', obstacle.get('name', ''))).strip()
+            if entity_name == self._collision_entity_name:
+                raw_pose = obstacle.get('pose', [])
+                if isinstance(raw_pose, list) and len(raw_pose) >= 6:
+                    collision_pose = raw_pose
+                break
+
+        if collision_pose is None:
+            raise ValueError(f'Could not find pose for collision entity {self._collision_entity_name} in models.obstacles.')
+
+        return (
+            float(human_pose[0]),
+            float(human_pose[1]),
+            float(human_pose[2]),
+            float(human_pose[5]),
+            float(collision_pose[2]),
+        )
+
+    def _run_stats_reader(self) -> None:
+        command = [
+            'gz',
+            'topic',
+            '-e',
+            '-t',
+            self._stats_topic,
+            '--json-output',
+        ]
+        while not self._stop_event.is_set():
+            try:
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                )
+            except FileNotFoundError:
+                self.get_logger().error('Could not find the `gz` executable needed to read Gazebo stats.')
+                return
+
+            self._stats_reader_process = process
+            stderr_output = ''
+            try:
+                if process.stdout is None:
+                    raise RuntimeError('Gazebo stats reader has no stdout stream.')
+
+                for line in process.stdout:
+                    if self._stop_event.is_set():
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    self._on_stats_json_line(line)
+            except Exception as error:
+                self.get_logger().warning(f'Gazebo stats reader hit an error: {error}')
+            finally:
+                if process.stdout is not None:
+                    process.stdout.close()
+                if process.stderr is not None:
+                    stderr_output = process.stderr.read().strip()
+                    process.stderr.close()
+                self._stop_process(process)
+                if self._stats_reader_process is process:
+                    self._stats_reader_process = None
+
+            if self._stop_event.is_set():
+                break
+            if stderr_output:
+                self.get_logger().warning(f'Gazebo stats reader exited and will retry: {stderr_output}')
+
+    def _on_stats_json_line(self, line: str) -> None:
+        data = json.loads(line)
+        sim_time = data.get('simTime', {})
+        if not isinstance(sim_time, dict):
+            return
+
+        sec = float(sim_time.get('sec', 0.0))
+        nsec = float(sim_time.get('nsec', 0.0))
+        sim_time_sec = sec + nsec * 1e-9
+
+        with self._stats_lock:
+            self._latest_sim_time_sec = sim_time_sec
+
+    def _get_stats_snapshot(self) -> float | None:
+        with self._stats_lock:
+            return self._latest_sim_time_sec
 
     def _update_motion(self) -> None:
         if self._completed:
             return
 
-        now_wall = time.monotonic()
-        if now_wall - self._launch_wall_time < self._start_delay_sec:
+        sim_time_sec = self._get_stats_snapshot()
+        if sim_time_sec is None:
             return
 
-        if self._last_motion_wall_time is None:
-            self._last_motion_wall_time = now_wall
+        if not self._simulation_started:
+            if sim_time_sec <= 0.0:
+                return
+            self._simulation_started = True
+            self._motion_start_sim_time = sim_time_sec
+            self._last_motion_sim_time = sim_time_sec
             return
 
-        dt = now_wall - self._last_motion_wall_time
-        self._last_motion_wall_time = now_wall
+        if self._motion_start_sim_time is None:
+            self._motion_start_sim_time = sim_time_sec
+        if sim_time_sec - self._motion_start_sim_time < self._start_delay_sec:
+            self._last_motion_sim_time = sim_time_sec
+            return
+
+        if self._last_motion_sim_time is None:
+            self._last_motion_sim_time = sim_time_sec
+            return
+
+        dt = sim_time_sec - self._last_motion_sim_time
+        self._last_motion_sim_time = sim_time_sec
         if dt <= 0.0:
             return
 
         remaining = self._travel_distance - self._travelled_distance
         if remaining <= 1e-6:
             self._completed = True
-            self.get_logger().info('Minimal actor forward test completed.')
+            self.get_logger().info('Human motion test completed.')
             return
 
         step = min(self._linear_speed * dt, remaining)
         self._travelled_distance += step
 
+        self._pending_pose_futures = [future for future in self._pending_pose_futures if not future.done()]
+        if len(self._pending_pose_futures) >= 4:
+            return
+
         x = self._start_x + math.cos(self._start_yaw) * self._travelled_distance
         y = self._start_y + math.sin(self._start_yaw) * self._travelled_distance
-        self._set_actor_pose(x, y, self._start_z, self._start_yaw)
+        self._set_entity_poses(x, y, self._start_yaw)
 
-    def _set_actor_pose(self, x: float, y: float, z: float, yaw: float) -> None:
+    def _set_entity_poses(self, x: float, y: float, yaw: float) -> None:
+        if not self._set_pose_client.service_is_ready():
+            if not self._warned_service_unavailable:
+                self.get_logger().info(f'Waiting for ROS bridge service {self._set_pose_service}...')
+                self._warned_service_unavailable = True
+            return
+        self._warned_service_unavailable = False
+
         half_yaw = yaw * 0.5
         qz = math.sin(half_yaw)
         qw = math.cos(half_yaw)
-        request = (
-            f'name: "{self._actor_entity_name}" '
-            f'position: {{x: {x:.6f}, y: {y:.6f}, z: {z:.6f}}} '
-            f'orientation: {{x: 0.0, y: 0.0, z: {qz:.9f}, w: {qw:.9f}}}'
+        visual_request = self._make_pose_request(self._visual_entity_name, x, y, self._visual_z, qz, qw)
+        collision_request = self._make_pose_request(self._collision_entity_name, x, y, self._collision_z, qz, qw)
+        self._pending_pose_futures.append(self._set_pose_client.call_async(visual_request))
+        self._pending_pose_futures.append(self._set_pose_client.call_async(collision_request))
+
+    def _make_pose_request(
+        self,
+        entity_name: str,
+        x: float,
+        y: float,
+        z: float,
+        qz: float,
+        qw: float,
+    ) -> SetEntityPose.Request:
+        request = SetEntityPose.Request()
+        request.entity = Entity(name=entity_name, type=Entity.MODEL)
+        request.pose = Pose(
+            position=Point(x=x, y=y, z=z),
+            orientation=Quaternion(x=0.0, y=0.0, z=qz, w=qw),
         )
-        result = subprocess.run(
-            [
-                'gz',
-                'service',
-                '-s',
-                self._set_pose_service,
-                '--reqtype',
-                'gz.msgs.Pose',
-                '--reptype',
-                'gz.msgs.Boolean',
-                '--timeout',
-                '1000',
-                '--req',
-                request,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            error_text = result.stderr.strip() or result.stdout.strip() or 'unknown error'
-            self.get_logger().warning(f'Failed to set actor pose: {error_text}')
+        return request
+
+    def _stop_process(self, process: subprocess.Popen[str]) -> None:
+        if process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1.0)
+
+    def destroy_node(self) -> bool:
+        self._stop_event.set()
+        if self._stats_reader_process is not None:
+            self._stop_process(self._stats_reader_process)
+        if self._stats_reader_thread.is_alive():
+            self._stats_reader_thread.join(timeout=2.0)
+        return super().destroy_node()
 
 
 def main(args: list[str] | None = None) -> None:

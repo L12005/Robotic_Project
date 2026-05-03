@@ -26,6 +26,21 @@ def generate_launch_description():
             output='screen',
         ),
         Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name='set_pose_bridge',
+            arguments=[
+                '/world/elevator_yield/set_pose@ros_gz_interfaces/srv/SetEntityPose@gz.msgs.Pose@gz.msgs.Boolean',
+            ],
+            output='screen',
+        ),
+        Node(
+            package='hmi_scene',
+            executable='human_motion_controller',
+            name='human_motion_controller',
+            output='screen',
+        ),
+        Node(
             package='hmi_scene',
             executable='scene_state_publisher',
             name='scene_state_publisher',
