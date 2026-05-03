@@ -26,6 +26,7 @@ setup(
             'human_state_monitor = hmi_test.human_state_monitor:main',
             'obstacle_state_monitor = hmi_test.obstacle_state_monitor:main',
             'map_state_monitor = hmi_test.map_state_monitor:main',
+            'map_grid_dump = hmi_test.map_grid_dump:main',
         ],
     },
 )

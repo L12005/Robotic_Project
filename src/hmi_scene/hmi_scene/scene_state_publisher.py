@@ -12,7 +12,9 @@ from typing import Any
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from geometry_msgs.msg import Pose
 from hmi_interfaces.msg import ActorState, ObstacleState
+from nav_msgs.msg import OccupancyGrid
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 
@@ -33,6 +35,27 @@ class ObstacleConfig:
     length: float
     is_static: bool
     fallback_pose: tuple[float, float, float] | None
+
+
+@dataclass(frozen=True)
+class MapConfig:
+    resolution: float
+    origin_x: float
+    origin_y: float
+    width: int
+    height: int
+    static_inflation_radius: float
+    human_inflation_radius: float
+
+
+@dataclass(frozen=True)
+class BoxConfig:
+    box_id: str
+    entity_name: str
+    size_x: float
+    size_y: float
+    fallback_pose: tuple[float, float, float] | None
+    inflate_radius: float
 
 
 class SceneStatePublisher(Node):
@@ -69,11 +92,20 @@ class SceneStatePublisher(Node):
             ).value
         )
 
-        self._robot_config, self._human_config, self._obstacle_configs = self._load_scene_config(scene_config_path)
+        (
+            self._robot_config,
+            self._human_config,
+            self._obstacle_configs,
+            self._map_config,
+            self._static_boxes,
+            self._dynamic_boxes,
+        ) = self._load_scene_config(scene_config_path)
 
         robot_topic = self.declare_parameter('robot_state_topic', '/hmi/scene/robot_state').value
         human_topic = self.declare_parameter('human_state_topic', '/hmi/scene/human_state').value
         obstacle_topic = self.declare_parameter('obstacle_state_topic', '/hmi/scene/obstacle_state').value
+        map_topic = self.declare_parameter('map_state_topic', '/hmi/scene/map_state').value
+        static_map_topic = self.declare_parameter('static_map_topic', '/hmi/scene/static_map').value
 
         self._frame_id = str(frame_id)
         self._gazebo_pose_topic = str(pose_topic)
@@ -81,24 +113,33 @@ class SceneStatePublisher(Node):
         self._pose_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._pose_reader_process: subprocess.Popen[str] | None = None
+        self._static_map_data = self._build_static_map_data()
 
         self._robot_publisher = self.create_publisher(ActorState, robot_topic, 10)
         self._human_publisher = self.create_publisher(ActorState, human_topic, 10)
         self._obstacle_publisher = self.create_publisher(ObstacleState, obstacle_topic, 10)
+        self._map_publisher = self.create_publisher(OccupancyGrid, map_topic, 10)
+        self._static_map_publisher = self.create_publisher(OccupancyGrid, static_map_topic, 10)
 
         self._pose_reader_thread = threading.Thread(target=self._run_pose_reader, daemon=True)
         self._pose_reader_thread.start()
         self.create_timer(1.0 / publish_rate_hz, self._publish_scene_state)
         self.get_logger().info(
             'Publishing scene state from Gazebo topic '
-            f'{pose_topic} to {robot_topic}, {human_topic}, and {obstacle_topic}.'
+            f'{pose_topic} to {robot_topic}, {human_topic}, {obstacle_topic}, {map_topic}, and {static_map_topic}.'
         )
         self.get_logger().info(f'Static scene metadata is loaded from {scene_config_path}.')
+        self.get_logger().info(
+            'Map grid configured as '
+            f'{self._map_config.width}x{self._map_config.height} cells at '
+            f'{self._map_config.resolution:.3f} m/cell from origin '
+            f'({self._map_config.origin_x:.2f}, {self._map_config.origin_y:.2f}).'
+        )
 
     def _load_scene_config(
         self,
         scene_config_path: Path,
-    ) -> tuple[ActorConfig, ActorConfig, list[ObstacleConfig]]:
+    ) -> tuple[ActorConfig, ActorConfig, list[ObstacleConfig], MapConfig, list[BoxConfig], list[BoxConfig]]:
         if not scene_config_path.is_file():
             raise FileNotFoundError(f'Scene config not found: {scene_config_path}')
 
@@ -108,7 +149,10 @@ class SceneStatePublisher(Node):
         models = data.get('models', {})
         robot = self._expect_mapping(models, 'robot')
         human = self._expect_mapping(models, 'human')
+        walls = models.get('walls', [])
         obstacles = models.get('obstacles', [])
+        if not isinstance(walls, list):
+            raise ValueError('models.walls must be a list in the scene config.')
         if not isinstance(obstacles, list):
             raise ValueError('models.obstacles must be a list in the scene config.')
 
@@ -124,9 +168,53 @@ class SceneStatePublisher(Node):
             actor_type=str(human.get('actor_type', 'human')),
             fallback_pose=self._parse_pose_entry(human),
         )
+
+        map_config = self._parse_map_config(data.get('map', {}))
+
         obstacle_configs = [self._parse_obstacle(item) for item in obstacles]
 
-        return robot_config, human_config, obstacle_configs
+        static_boxes = [
+            self._parse_box(
+                item,
+                default_name='wall',
+                inflate_radius=map_config.static_inflation_radius,
+            )
+            for item in walls
+        ]
+        dynamic_boxes: list[BoxConfig] = []
+        for item in obstacles:
+            obstacle = self._parse_obstacle(item)
+            box = self._parse_box(
+                item,
+                default_name=obstacle.obstacle_id,
+                inflate_radius=(
+                    map_config.static_inflation_radius if obstacle.is_static else map_config.human_inflation_radius
+                ),
+            )
+            if obstacle.is_static:
+                static_boxes.append(box)
+            else:
+                dynamic_boxes.append(box)
+
+        return robot_config, human_config, obstacle_configs, map_config, static_boxes, dynamic_boxes
+
+    def _parse_map_config(self, data: Any) -> MapConfig:
+        if not isinstance(data, dict):
+            raise ValueError('map must be a mapping in the scene config.')
+
+        origin = data.get('origin', [])
+        if not isinstance(origin, list) or len(origin) < 2:
+            raise ValueError('map.origin must be [x, y].')
+
+        return MapConfig(
+            resolution=float(data.get('resolution', 0.05)),
+            origin_x=float(origin[0]),
+            origin_y=float(origin[1]),
+            width=int(data.get('width', 200)),
+            height=int(data.get('height', 200)),
+            static_inflation_radius=float(data.get('static_inflation_radius', 0.18)),
+            human_inflation_radius=float(data.get('human_inflation_radius', 0.0)),
+        )
 
     def _expect_mapping(self, parent: dict[str, Any], key: str) -> dict[str, Any]:
         value = parent.get(key, {})
@@ -151,6 +239,25 @@ class SceneStatePublisher(Node):
             length=float(size[1]),
             is_static=bool(data.get('is_static', True)),
             fallback_pose=self._parse_pose_entry(data),
+        )
+
+    def _parse_box(self, data: Any, default_name: str, inflate_radius: float) -> BoxConfig:
+        if not isinstance(data, dict):
+            raise ValueError('Each map box entry must be a mapping in the scene config.')
+
+        size = data.get('size', [])
+        if not isinstance(size, list) or len(size) < 2:
+            raise ValueError('Each map box entry must provide size: [size_x, size_y, ...].')
+
+        box_id = str(data.get('name', default_name))
+        entity_name = str(data.get('entity_name', box_id))
+        return BoxConfig(
+            box_id=box_id,
+            entity_name=entity_name,
+            size_x=float(size[0]),
+            size_y=float(size[1]),
+            fallback_pose=self._parse_pose_entry(data),
+            inflate_radius=inflate_radius,
         )
 
     def _parse_pose_entry(self, data: dict[str, Any]) -> tuple[float, float, float] | None:
@@ -285,6 +392,101 @@ class SceneStatePublisher(Node):
                 return pose
         return fallback_pose
 
+    def _build_static_map_data(self) -> list[int]:
+        grid = [0] * (self._map_config.width * self._map_config.height)
+        for box in self._static_boxes:
+            pose = self._find_entity_pose(box.entity_name, box.fallback_pose) or box.fallback_pose
+            if pose is None:
+                continue
+            self._mark_box_on_grid(
+                grid,
+                center_x=pose[0],
+                center_y=pose[1],
+                yaw=pose[2],
+                size_x=box.size_x,
+                size_y=box.size_y,
+                inflate_radius=box.inflate_radius,
+            )
+        return grid
+
+    def _build_dynamic_map_data(self) -> list[int]:
+        grid = list(self._static_map_data)
+        for box in self._dynamic_boxes:
+            pose = self._find_entity_pose(box.entity_name, box.fallback_pose)
+            if pose is None:
+                continue
+            self._mark_box_on_grid(
+                grid,
+                center_x=pose[0],
+                center_y=pose[1],
+                yaw=pose[2],
+                size_x=box.size_x,
+                size_y=box.size_y,
+                inflate_radius=box.inflate_radius,
+            )
+        return grid
+
+    def _mark_box_on_grid(
+        self,
+        grid: list[int],
+        center_x: float,
+        center_y: float,
+        yaw: float,
+        size_x: float,
+        size_y: float,
+        inflate_radius: float,
+    ) -> None:
+        half_x = size_x * 0.5 + inflate_radius
+        half_y = size_y * 0.5 + inflate_radius
+        abs_cos = abs(math.cos(yaw))
+        abs_sin = abs(math.sin(yaw))
+        bound_x = abs_cos * half_x + abs_sin * half_y
+        bound_y = abs_sin * half_x + abs_cos * half_y
+
+        min_grid_x = max(
+            0,
+            int(math.floor((center_x - bound_x - self._map_config.origin_x) / self._map_config.resolution)),
+        )
+        max_grid_x = min(
+            self._map_config.width - 1,
+            int(math.floor((center_x + bound_x - self._map_config.origin_x) / self._map_config.resolution)),
+        )
+        min_grid_y = max(
+            0,
+            int(math.floor((center_y - bound_y - self._map_config.origin_y) / self._map_config.resolution)),
+        )
+        max_grid_y = min(
+            self._map_config.height - 1,
+            int(math.floor((center_y + bound_y - self._map_config.origin_y) / self._map_config.resolution)),
+        )
+
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        for grid_y in range(min_grid_y, max_grid_y + 1):
+            world_y = self._map_config.origin_y + (grid_y + 0.5) * self._map_config.resolution
+            for grid_x in range(min_grid_x, max_grid_x + 1):
+                world_x = self._map_config.origin_x + (grid_x + 0.5) * self._map_config.resolution
+                dx = world_x - center_x
+                dy = world_y - center_y
+                local_x = cos_yaw * dx + sin_yaw * dy
+                local_y = -sin_yaw * dx + cos_yaw * dy
+                if abs(local_x) <= half_x and abs(local_y) <= half_y:
+                    grid[grid_y * self._map_config.width + grid_x] = 100
+
+    def _create_occupancy_grid_msg(self, now, data: list[int]) -> OccupancyGrid:
+        msg = OccupancyGrid()
+        msg.header.stamp = now
+        msg.header.frame_id = self._frame_id
+        msg.info.resolution = self._map_config.resolution
+        msg.info.width = self._map_config.width
+        msg.info.height = self._map_config.height
+        msg.info.origin = Pose()
+        msg.info.origin.position.x = self._map_config.origin_x
+        msg.info.origin.position.y = self._map_config.origin_y
+        msg.info.origin.orientation.w = 1.0
+        msg.data = data
+        return msg
+
     def _publish_scene_state(self) -> None:
         now = self.get_clock().now().to_msg()
 
@@ -333,6 +535,9 @@ class SceneStatePublisher(Node):
             obstacle_msg.length = obstacle.length
             obstacle_msg.is_static = obstacle.is_static
             self._obstacle_publisher.publish(obstacle_msg)
+
+        self._static_map_publisher.publish(self._create_occupancy_grid_msg(now, list(self._static_map_data)))
+        self._map_publisher.publish(self._create_occupancy_grid_msg(now, self._build_dynamic_map_data()))
 
     def destroy_node(self) -> bool:
         self._stop_event.set()

@@ -4,6 +4,14 @@ description: >
   one robot, two door-side walls, and a floor plane. There is no ceiling,
   no dynamic motion, and no control logic in the scene itself.
 
+map:
+  resolution: 0.05
+  origin: [-5.0, -5.0]
+  width: 200
+  height: 200
+  static_inflation_radius: 0.18
+  human_inflation_radius: 0.0
+
 models:
   robot:
     name: turtlebot3_burger_ir
@@ -19,22 +27,32 @@ models:
     - aws_robomaker_hospital_elevator_01_portal
   walls:
     - name: left_door_side_wall
+      entity_name: left_door_side_wall
       pose: [-1.57, 1.74, 0.0, 0.0, 0.0, 0.0]
+      size: [1.50, 0.22, 2.90]
     - name: right_door_side_wall
+      entity_name: right_door_side_wall
       pose: [1.57, 1.74, 0.0, 0.0, 0.0, 0.0]
+      size: [1.50, 0.22, 2.90]
     - name: left_corridor_wall
+      entity_name: left_corridor_wall
       pose: [-2.43, -2.75, 0.0, 0.0, 0.0, 0.0]
+      size: [0.22, 9.00, 2.90]
     - name: right_corridor_wall
+      entity_name: right_corridor_wall
       pose: [2.43, -2.75, 0.0, 0.0, 0.0, 0.0]
+      size: [0.22, 9.00, 2.90]
   obstacles:
     - name: human_collision_proxy
       entity_name: human_collision_proxy
       pose: [0.000004, 3.219430, 0.960000, 0.0, 0.0, -1.556373]
       size: [0.95, 0.60, 1.72]
+      is_static: false
     - name: rear_obstacle
       entity_name: rear_obstacle
       pose: [1.77, -1.26, 0.0, 0.0, 0.0, 0.0]
       size: [1.10, 0.55, 1.50]
+      is_static: true
   upstream_sources:
     robot: https://github.com/ROBOTIS-GIT/turtlebot3_simulations
     human_actor_mesh: local human_actor/meshes/walk.dae

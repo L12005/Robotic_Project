@@ -24,3 +24,20 @@ def summarize_occupancy_grid(msg: OccupancyGrid) -> str:
         f'free={free_cells} occupied={occupied_cells} unknown={unknown_cells} '
         f'occupied_ratio={occupied_ratio:.1f}%'
     )
+
+
+def occupancy_grid_to_binary_rows(msg: OccupancyGrid, occupancy_threshold: int = 50) -> list[list[int]]:
+    width = int(msg.info.width)
+    height = int(msg.info.height)
+    data = list(msg.data)
+    rows: list[list[int]] = []
+    for row_index in range(height):
+        start = row_index * width
+        end = start + width
+        raw_row = data[start:end]
+        rows.append([1 if value >= occupancy_threshold else 0 for value in raw_row])
+    return rows
+
+
+def format_binary_grid_rows(rows: list[list[int]]) -> str:
+    return '\n'.join('[' + ', '.join(str(value) for value in row) + ']' for row in rows)
