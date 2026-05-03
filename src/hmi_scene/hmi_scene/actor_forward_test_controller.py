@@ -17,6 +17,7 @@ from ros_gz_interfaces.msg import Entity
 from ros_gz_interfaces.srv import SetEntityPose
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
+from std_msgs.msg import Float64
 
 
 class ActorForwardTestController(Node):
@@ -44,7 +45,7 @@ class ActorForwardTestController(Node):
             self.declare_parameter(
                 'visual_entity_name',
                 'human_in_elevator',
-                ParameterDescriptor(description='Gazebo visual human entity that should move forward at a constant speed.'),
+                ParameterDescriptor(description='Visible human model name.'),
             ).value
         )
         self._collision_entity_name = str(
@@ -68,6 +69,27 @@ class ActorForwardTestController(Node):
                 ParameterDescriptor(description='Total forward travel distance in meters for the moving human test.'),
             ).value
         )
+        self._stride_length = float(
+            self.declare_parameter(
+                'stride_length',
+                0.72,
+                ParameterDescriptor(description='Walking stride length in meters used to drive limb swing phase.'),
+            ).value
+        )
+        self._arm_swing_amplitude = float(
+            self.declare_parameter(
+                'arm_swing_amplitude_rad',
+                0.55,
+                ParameterDescriptor(description='Peak shoulder swing angle in radians.'),
+            ).value
+        )
+        self._leg_swing_amplitude = float(
+            self.declare_parameter(
+                'leg_swing_amplitude_rad',
+                0.35,
+                ParameterDescriptor(description='Peak hip swing angle in radians.'),
+            ).value
+        )
         self._start_delay_sec = float(
             self.declare_parameter(
                 'start_delay_sec',
@@ -87,6 +109,10 @@ class ActorForwardTestController(Node):
         self._set_pose_service = f'/world/{self._world_name}/set_pose'
         self._stats_topic = f'/world/{self._world_name}/stats'
         self._set_pose_client = self.create_client(SetEntityPose, self._set_pose_service)
+        self._left_arm_publisher = self.create_publisher(Float64, '/human_in_elevator/left_arm_joint_cmd', 10)
+        self._right_arm_publisher = self.create_publisher(Float64, '/human_in_elevator/right_arm_joint_cmd', 10)
+        self._left_leg_publisher = self.create_publisher(Float64, '/human_in_elevator/left_leg_joint_cmd', 10)
+        self._right_leg_publisher = self.create_publisher(Float64, '/human_in_elevator/right_leg_joint_cmd', 10)
         self._pending_pose_futures: list[Any] = []
         self._warned_service_unavailable = False
         self._stats_lock = threading.Lock()
@@ -104,7 +130,7 @@ class ActorForwardTestController(Node):
         self.create_timer(1.0 / update_rate_hz, self._update_motion)
         self.get_logger().info(
             'Human motion controller is ready. '
-            f'Visual entity: {self._visual_entity_name}, collision entity: {self._collision_entity_name}, '
+            f'Initial visual entity: {self._visual_entity_name}, collision entity: {self._collision_entity_name}, '
             f'speed: {self._linear_speed:.2f} m/s, '
             f'distance: {self._travel_distance:.2f} m.'
         )
@@ -235,12 +261,14 @@ class ActorForwardTestController(Node):
             self._simulation_started = True
             self._motion_start_sim_time = sim_time_sec
             self._last_motion_sim_time = sim_time_sec
+            self._publish_joint_commands(0.0)
             return
 
         if self._motion_start_sim_time is None:
             self._motion_start_sim_time = sim_time_sec
         if sim_time_sec - self._motion_start_sim_time < self._start_delay_sec:
             self._last_motion_sim_time = sim_time_sec
+            self._publish_joint_commands(0.0)
             return
 
         if self._last_motion_sim_time is None:
@@ -254,6 +282,7 @@ class ActorForwardTestController(Node):
 
         remaining = self._travel_distance - self._travelled_distance
         if remaining <= 1e-6:
+            self._publish_joint_commands(0.0)
             self._completed = True
             self.get_logger().info('Human motion test completed.')
             return
@@ -267,9 +296,10 @@ class ActorForwardTestController(Node):
 
         x = self._start_x + math.cos(self._start_yaw) * self._travelled_distance
         y = self._start_y + math.sin(self._start_yaw) * self._travelled_distance
-        self._set_entity_poses(x, y, self._start_yaw)
+        self._set_entity_poses(x, y)
+        self._publish_joint_commands(self._travelled_distance)
 
-    def _set_entity_poses(self, x: float, y: float, yaw: float) -> None:
+    def _set_entity_poses(self, x: float, y: float) -> None:
         if not self._set_pose_client.service_is_ready():
             if not self._warned_service_unavailable:
                 self.get_logger().info(f'Waiting for ROS bridge service {self._set_pose_service}...')
@@ -277,13 +307,35 @@ class ActorForwardTestController(Node):
             return
         self._warned_service_unavailable = False
 
-        half_yaw = yaw * 0.5
-        qz = math.sin(half_yaw)
-        qw = math.cos(half_yaw)
-        visual_request = self._make_pose_request(self._visual_entity_name, x, y, self._visual_z, qz, qw)
-        collision_request = self._make_pose_request(self._collision_entity_name, x, y, self._collision_z, qz, qw)
+        visual_quaternion = self._quaternion_from_rpy(0.0, 0.0, self._start_yaw)
+        collision_quaternion = self._quaternion_from_rpy(0.0, 0.0, self._start_yaw)
+
+        visual_request = self._make_pose_request(
+            self._visual_entity_name,
+            x,
+            y,
+            self._visual_z,
+            visual_quaternion,
+        )
+        collision_request = self._make_pose_request(
+            self._collision_entity_name,
+            x,
+            y,
+            self._collision_z,
+            collision_quaternion,
+        )
         self._pending_pose_futures.append(self._set_pose_client.call_async(visual_request))
         self._pending_pose_futures.append(self._set_pose_client.call_async(collision_request))
+
+    def _publish_joint_commands(self, travelled_distance: float) -> None:
+        phase = 2.0 * math.pi * travelled_distance / max(self._stride_length, 1e-6)
+        arm_angle = self._arm_swing_amplitude * math.sin(phase)
+        leg_angle = self._leg_swing_amplitude * math.sin(phase)
+
+        self._left_arm_publisher.publish(Float64(data=arm_angle))
+        self._right_arm_publisher.publish(Float64(data=-arm_angle))
+        self._left_leg_publisher.publish(Float64(data=-leg_angle))
+        self._right_leg_publisher.publish(Float64(data=leg_angle))
 
     def _make_pose_request(
         self,
@@ -291,16 +343,39 @@ class ActorForwardTestController(Node):
         x: float,
         y: float,
         z: float,
-        qz: float,
-        qw: float,
+        quaternion: tuple[float, float, float, float],
     ) -> SetEntityPose.Request:
         request = SetEntityPose.Request()
         request.entity = Entity(name=entity_name, type=Entity.MODEL)
         request.pose = Pose(
             position=Point(x=x, y=y, z=z),
-            orientation=Quaternion(x=0.0, y=0.0, z=qz, w=qw),
+            orientation=Quaternion(
+                x=quaternion[0],
+                y=quaternion[1],
+                z=quaternion[2],
+                w=quaternion[3],
+            ),
         )
         return request
+
+    def _quaternion_from_rpy(self, roll: float, pitch: float, yaw: float) -> tuple[float, float, float, float]:
+        half_roll = roll * 0.5
+        half_pitch = pitch * 0.5
+        half_yaw = yaw * 0.5
+
+        cr = math.cos(half_roll)
+        sr = math.sin(half_roll)
+        cp = math.cos(half_pitch)
+        sp = math.sin(half_pitch)
+        cy = math.cos(half_yaw)
+        sy = math.sin(half_yaw)
+
+        return (
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+            cr * cp * cy + sr * sp * sy,
+        )
 
     def _stop_process(self, process: subprocess.Popen[str]) -> None:
         if process.poll() is not None:

@@ -35,6 +35,18 @@ def generate_launch_description():
             output='screen',
         ),
         Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name='human_joint_bridge',
+            arguments=[
+                '/human_in_elevator/left_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
+                '/human_in_elevator/right_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
+                '/human_in_elevator/left_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
+                '/human_in_elevator/right_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
+            ],
+            output='screen',
+        ),
+        Node(
             package='hmi_scene',
             executable='human_motion_controller',
             name='human_motion_controller',
