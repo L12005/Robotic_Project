@@ -134,25 +134,27 @@
       <pose>0.000004 3.219430 1.174502 0 0 -1.556373</pose>
       <skin>
         <filename>model://human_actor/meshes/walk.dae</filename>
-        <scale>1.0 1.0 1.0</scale>
-      </skin>
-      <animation name="walk_cycle">
-        <filename>model://human_actor/meshes/walk.dae</filename>
         <scale>1.0</scale>
-        <interpolate_x>true</interpolate_x>
+      </skin>
+      <animation name="walk">
+        <filename>model://human_actor/meshes/walk.dae</filename>
       </animation>
       <script>
         <loop>false</loop>
         <delay_start>0.0</delay_start>
-        <auto_start>false</auto_start>
-        <trajectory id="0" type="walk_cycle">
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk" tension="1.0">
           <waypoint>
             <time>0.0</time>
             <pose>0 0 0 0 0 0</pose>
           </waypoint>
           <waypoint>
-            <time>4.0</time>
-            <pose>0 0 0 0 0 0</pose>
+            <time>6.0</time>
+            <pose>2.0 0 0 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>18.0</time>
+            <pose>6.2 0 0 0 0 0</pose>
           </waypoint>
         </trajectory>
       </script>
