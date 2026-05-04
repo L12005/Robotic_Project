@@ -14,7 +14,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Pose
 from hmi_interfaces.msg import ActorState, ObstacleState
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 
@@ -137,6 +137,11 @@ class SceneStatePublisher(Node):
         ) = self._load_scene_config(scene_config_path)
 
         robot_topic = self.declare_parameter('robot_state_topic', '/hmi/scene/robot_state').value
+        robot_odometry_topic = self.declare_parameter(
+            'robot_odometry_topic',
+            '/model/turtlebot3_burger_ir/odometry',
+            ParameterDescriptor(description='Robot odometry topic bridged from Gazebo DiffDrive.'),
+        ).value
         human_topic = self.declare_parameter('human_state_topic', '/hmi/scene/human_state').value
         obstacle_topic = self.declare_parameter('obstacle_state_topic', '/hmi/scene/obstacle_state').value
         map_topic = self.declare_parameter('map_state_topic', '/hmi/scene/map_state').value
@@ -150,6 +155,10 @@ class SceneStatePublisher(Node):
         self._motion_yaw_epsilon_rad = max(float(motion_yaw_epsilon_rad), 0.0)
         self._latest_poses: dict[str, tuple[float, float, float]] = {}
         self._latest_pose_stamps: dict[str, float] = {}
+        self._robot_odom_lock = threading.Lock()
+        self._latest_robot_odom_pose: tuple[float, float, float] | None = None
+        self._latest_robot_odom_twist: tuple[float, float] | None = None
+        self._latest_robot_odom_stamp: float | None = None
         self._last_actor_pose_samples: dict[str, tuple[float, float, float, float]] = {}
         self._last_actor_motion_times: dict[str, float] = {}
         self._pose_lock = threading.Lock()
@@ -166,6 +175,7 @@ class SceneStatePublisher(Node):
         self._obstacle_publisher = self.create_publisher(ObstacleState, obstacle_topic, 10)
         self._map_publisher = self.create_publisher(OccupancyGrid, map_topic, 10)
         self._static_map_publisher = self.create_publisher(OccupancyGrid, static_map_topic, 10)
+        self.create_subscription(Odometry, robot_odometry_topic, self._on_robot_odometry, 20)
 
         self._pose_reader_thread = threading.Thread(target=self._run_pose_reader, daemon=True)
         self._stats_reader_thread = threading.Thread(target=self._run_stats_reader, daemon=True)
@@ -176,6 +186,7 @@ class SceneStatePublisher(Node):
             'Publishing scene state from Gazebo topic '
             f'{pose_topic} to {robot_topic}, {human_topic}, {obstacle_topic}, {map_topic}, and {static_map_topic}.'
         )
+        self.get_logger().info(f'Robot odometry is consumed from {robot_odometry_topic} when available.')
         self.get_logger().info(f'Gazebo play/pause state is read from {stats_topic}.')
         self.get_logger().info(f'Static scene metadata is loaded from {scene_config_path}.')
         self.get_logger().info(
@@ -545,6 +556,44 @@ class SceneStatePublisher(Node):
                 self._gazebo_is_paused = abs(sim_time_sec - self._latest_sim_time_sec) <= 1e-9
             self._latest_sim_time_sec = sim_time_sec
 
+    def _on_robot_odometry(self, msg: Odometry) -> None:
+        orientation = msg.pose.pose.orientation
+        odom_yaw = math.atan2(
+            2.0 * (
+                float(orientation.w) * float(orientation.z) +
+                float(orientation.x) * float(orientation.y)
+            ),
+            1.0 - 2.0 * (
+                float(orientation.y) * float(orientation.y) +
+                float(orientation.z) * float(orientation.z)
+            ),
+        )
+        stamp_sec = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
+        odom_pose = (
+            float(msg.pose.pose.position.x),
+            float(msg.pose.pose.position.y),
+            float(odom_yaw),
+        )
+        if self._robot_config.fallback_pose is not None:
+            world_pose = self._apply_pose_offset(self._robot_config.fallback_pose, odom_pose)
+        else:
+            world_pose = odom_pose
+        with self._robot_odom_lock:
+            self._latest_robot_odom_pose = world_pose
+            self._latest_robot_odom_twist = (
+                float(msg.twist.twist.linear.x),
+                float(msg.twist.twist.angular.z),
+            )
+            self._latest_robot_odom_stamp = stamp_sec
+
+    def _get_robot_odometry(self) -> tuple[tuple[float, float, float] | None, tuple[float, float] | None, float | None]:
+        with self._robot_odom_lock:
+            return (
+                self._latest_robot_odom_pose,
+                self._latest_robot_odom_twist,
+                self._latest_robot_odom_stamp,
+            )
+
     def _find_entity_pose(
         self,
         entity_name: str,
@@ -729,14 +778,23 @@ class SceneStatePublisher(Node):
     def _publish_scene_state(self) -> None:
         now = self.get_clock().now().to_msg()
 
-        robot_pose, robot_stamp = self._resolve_actor_pose(self._robot_config)
+        robot_pose, robot_twist, robot_stamp = self._get_robot_odometry()
+        if robot_pose is None:
+            fallback_pose, fallback_stamp = self._resolve_actor_pose(self._robot_config)
+            robot_pose = fallback_pose
+            robot_stamp = fallback_stamp
         if robot_pose is not None:
-            robot_linear_x, robot_angular_z, robot_is_moving = self._estimate_actor_motion(
-                self._robot_config.actor_id,
-                robot_pose,
-                robot_stamp,
-                self._robot_config.fallback_linear_speed,
-            )
+            if robot_twist is not None:
+                robot_linear_x = float(robot_twist[0])
+                robot_angular_z = float(robot_twist[1])
+                robot_is_moving = abs(robot_linear_x) >= 1e-3 or abs(robot_angular_z) >= 1e-3
+            else:
+                robot_linear_x, robot_angular_z, robot_is_moving = self._estimate_actor_motion(
+                    self._robot_config.actor_id,
+                    robot_pose,
+                    robot_stamp,
+                    self._robot_config.fallback_linear_speed,
+                )
             robot_msg = ActorState()
             robot_msg.header.stamp = now
             robot_msg.header.frame_id = self._frame_id

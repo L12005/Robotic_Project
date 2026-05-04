@@ -157,6 +157,7 @@ class BehaviorNode(Node):
         behavior_msg = BehaviorState()
         behavior_msg.header.stamp = self.get_clock().now().to_msg()
         behavior_msg.current_state = output.behavior_state
+        behavior_msg.internal_state = output.internal_state.value
         behavior_msg.reason = output.reason
         behavior_msg.target_linear_x = float(output.target_linear_x)
         behavior_msg.target_angular_z = float(output.target_angular_z)
@@ -166,6 +167,7 @@ class BehaviorNode(Node):
     def _maybe_log_debug(self, output, now_sec: float) -> None:
         signature = (
             output.behavior_state,
+            output.internal_state.value,
             output.reason,
             round(float(output.target_linear_x), 3),
             round(float(output.target_angular_z), 3),
@@ -184,7 +186,8 @@ class BehaviorNode(Node):
 
         self.get_logger().info(
             'control_output '
-            f'state={output.behavior_state} reason={output.reason or "none"} '
+            f'state={output.behavior_state} internal_state={output.internal_state.value} '
+            f'reason={output.reason or "none"} '
             f'cmd=(linear_x={output.target_linear_x:.3f}, angular_z={output.target_angular_z:.3f}) '
             f'{robot_text} {goal_text}'
         )

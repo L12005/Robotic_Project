@@ -54,7 +54,6 @@
       <uri>model://turtlebot3_burger_ir</uri>
       <name>turtlebot3_burger_ir</name>
       <pose>0.00 0.15 0.012 0 0 1.570796</pose>
-      <static>true</static>
     </include>
 
     <model name="elevator_car">

@@ -3,3 +3,6 @@ install/
 log/
 .codex
 env.sh
+__pycache__/
+*.pyc
+*.pyo

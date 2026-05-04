@@ -75,12 +75,23 @@ def generate_launch_description():
             package='hmi_behavior',
             executable='behavior_node',
             name='hmi_behavior',
+            parameters=[
+                {
+                    'control_rate_hz': 20.0,
+                }
+            ],
             output='screen',
         ),
         Node(
             package='hmi_scene',
             executable='scene_state_publisher',
             name='scene_state_publisher',
+            parameters=[
+                {
+                    'publish_rate_hz': 20.0,
+                    'robot_odometry_topic': '/hmi/scene/robot_odometry',
+                }
+            ],
             output='screen',
         ),
     ])

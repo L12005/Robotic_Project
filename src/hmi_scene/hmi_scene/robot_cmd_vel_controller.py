@@ -84,6 +84,7 @@ class RobotCmdVelController(Node):
         self._last_sent_command_pose: tuple[float, float, float, float] | None = None
         self._last_cmd_debug_log_sec = 0.0
         self._last_cmd_debug_signature: tuple[float, float] | None = None
+        self._last_pose_sync_log_sec = 0.0
 
         self._latest_sim_time_sec: float | None = None
         self._current_x = self._fallback_x
@@ -162,11 +163,28 @@ class RobotCmdVelController(Node):
         self._last_cmd_debug_signature = signature
 
     def _on_robot_state(self, msg: ActorState) -> None:
+        if self._should_ignore_robot_state_feedback():
+            return
         with self._pose_lock:
             self._current_x = float(msg.x)
             self._current_y = float(msg.y)
             self._current_yaw = float(msg.yaw)
             self._robot_pose_received = True
+        now_sec = self.get_clock().now().nanoseconds * 1e-9
+        if now_sec - self._last_pose_sync_log_sec >= 1.0:
+            self.get_logger().info(
+                'scene_pose_sync '
+                f'robot_state x={self._current_x:.3f} y={self._current_y:.3f} yaw={self._current_yaw:.3f}'
+            )
+            self._last_pose_sync_log_sec = now_sec
+
+    def _should_ignore_robot_state_feedback(self) -> bool:
+        now_wall_sec = self.get_clock().now().nanoseconds * 1e-9
+        if self._last_cmd_wall_time_sec <= 0.0:
+            return False
+        if now_wall_sec - self._last_cmd_wall_time_sec > self._cmd_timeout_sec:
+            return False
+        return abs(self._cmd_linear_x) > 1e-4 or abs(self._cmd_angular_z) > 1e-4
 
     def _run_stats_reader(self) -> None:
         command = [
