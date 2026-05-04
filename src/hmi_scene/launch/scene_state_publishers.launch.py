@@ -54,6 +54,31 @@ def generate_launch_description():
         ),
         Node(
             package='hmi_scene',
+            executable='robot_cmd_vel_controller',
+            name='robot_cmd_vel_controller',
+            output='screen',
+        ),
+        Node(
+            package='hmi_scene',
+            executable='goal_pose_publisher',
+            name='goal_pose_publisher',
+            parameters=[
+                {
+                    'goal_x': 0.0,
+                    'goal_y': 2.95,
+                    'goal_yaw': 1.570796,
+                }
+            ],
+            output='screen',
+        ),
+        Node(
+            package='hmi_behavior',
+            executable='behavior_node',
+            name='hmi_behavior',
+            output='screen',
+        ),
+        Node(
+            package='hmi_scene',
             executable='scene_state_publisher',
             name='scene_state_publisher',
             output='screen',

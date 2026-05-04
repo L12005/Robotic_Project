@@ -26,6 +26,8 @@ setup(
         'console_scripts': [
             'actor_forward_test_controller = hmi_scene.actor_forward_test_controller:main',
             'human_motion_controller = hmi_scene.actor_forward_test_controller:main',
+            'goal_pose_publisher = hmi_scene.goal_pose_publisher:main',
+            'robot_cmd_vel_controller = hmi_scene.robot_cmd_vel_controller:main',
             'scene_state_publisher = hmi_scene.scene_state_publisher:main',
         ],
     },

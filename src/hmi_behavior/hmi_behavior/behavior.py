@@ -19,6 +19,8 @@ class BehaviorNode(Node):
         self._world_state = AggregatedState()
         self._config = self._declare_and_load_config()
         self._state_machine = BehaviorStateMachine(self._config)
+        self._last_debug_log_sec = 0.0
+        self._last_debug_signature: tuple[str, str, float, float] | None = None
 
         robot_state_topic = self.declare_parameter(
             'robot_state_topic',
@@ -159,6 +161,35 @@ class BehaviorNode(Node):
         behavior_msg.target_linear_x = float(output.target_linear_x)
         behavior_msg.target_angular_z = float(output.target_angular_z)
         self._behavior_state_publisher.publish(behavior_msg)
+        self._maybe_log_debug(output, now_sec)
+
+    def _maybe_log_debug(self, output, now_sec: float) -> None:
+        signature = (
+            output.behavior_state,
+            output.reason,
+            round(float(output.target_linear_x), 3),
+            round(float(output.target_angular_z), 3),
+        )
+        if signature == self._last_debug_signature and now_sec - self._last_debug_log_sec < 1.0:
+            return
+
+        robot = self._world_state.robot
+        goal = self._world_state.goal
+        robot_text = 'robot=(missing)'
+        if robot is not None:
+            robot_text = f'robot=({robot.x:.2f}, {robot.y:.2f}, yaw={robot.yaw:.2f})'
+        goal_text = 'goal=(missing)'
+        if goal is not None:
+            goal_text = f'goal=({goal.x:.2f}, {goal.y:.2f})'
+
+        self.get_logger().info(
+            'control_output '
+            f'state={output.behavior_state} reason={output.reason or "none"} '
+            f'cmd=(linear_x={output.target_linear_x:.3f}, angular_z={output.target_angular_z:.3f}) '
+            f'{robot_text} {goal_text}'
+        )
+        self._last_debug_log_sec = now_sec
+        self._last_debug_signature = signature
 
     def destroy_node(self) -> bool:
         self._publish_zero_velocity()

@@ -26,6 +26,8 @@ class ActorConfig:
     actor_type: str
     fallback_pose: tuple[float, float, float] | None
     fallback_linear_speed: float
+    pose_source_entity_name: str
+    pose_source_offset: tuple[float, float, float]
 
 
 @dataclass(frozen=True)
@@ -224,6 +226,18 @@ class SceneStatePublisher(Node):
             actor_type=str(robot.get('actor_type', 'robot')),
             fallback_pose=self._parse_pose_entry(robot),
             fallback_linear_speed=float(robot.get('linear_speed', 0.0)),
+            pose_source_entity_name=str(
+                robot.get(
+                    'state_source_entity_name',
+                    robot.get('command_entity_name', robot.get('entity_name', robot.get('name', 'turtlebot3_burger_ir'))),
+                )
+            ),
+            pose_source_offset=self._parse_xy_yaw_offset(
+                robot.get(
+                    'state_pose_offset',
+                    robot.get('command_offset', [0.0, 0.0, 0.0]),
+                )
+            ),
         )
         human_config = ActorConfig(
             entity_name=str(human.get('entity_name', human.get('name', 'human_in_elevator'))),
@@ -231,6 +245,8 @@ class SceneStatePublisher(Node):
             actor_type=str(human.get('actor_type', 'human')),
             fallback_pose=self._parse_pose_entry(human),
             fallback_linear_speed=float(human.get('linear_speed', 0.0)),
+            pose_source_entity_name=str(human.get('entity_name', human.get('name', 'human_in_elevator'))),
+            pose_source_offset=(0.0, 0.0, 0.0),
         )
 
         map_config = self._parse_map_config(data.get('map', {}))
@@ -289,6 +305,11 @@ class SceneStatePublisher(Node):
             static_inflation_radius=float(data.get('static_inflation_radius', 0.18)),
             human_inflation_radius=float(data.get('human_inflation_radius', 0.0)),
         )
+
+    def _parse_xy_yaw_offset(self, data: Any) -> tuple[float, float, float]:
+        if not isinstance(data, list) or len(data) < 3:
+            raise ValueError('Actor pose offset must be [x, y, yaw].')
+        return (float(data[0]), float(data[1]), float(data[2]))
 
     def _expect_mapping(self, parent: dict[str, Any], key: str) -> dict[str, Any]:
         value = parent.get(key, {})
@@ -544,6 +565,24 @@ class SceneStatePublisher(Node):
                 return pose, latest_pose_stamps.get(pose_name)
         return fallback_pose, None
 
+    def _apply_pose_offset(
+        self,
+        base_pose: tuple[float, float, float],
+        offset: tuple[float, float, float],
+    ) -> tuple[float, float, float]:
+        base_x, base_y, base_yaw = base_pose
+        offset_x, offset_y, offset_yaw = offset
+        world_x = base_x + math.cos(base_yaw) * offset_x - math.sin(base_yaw) * offset_y
+        world_y = base_y + math.sin(base_yaw) * offset_x + math.cos(base_yaw) * offset_y
+        world_yaw = self._normalize_angle(base_yaw + offset_yaw)
+        return (world_x, world_y, world_yaw)
+
+    def _resolve_actor_pose(self, actor: ActorConfig) -> tuple[tuple[float, float, float] | None, float | None]:
+        source_pose, source_stamp = self._find_entity_pose(actor.pose_source_entity_name, None)
+        if source_pose is not None:
+            return self._apply_pose_offset(source_pose, actor.pose_source_offset), source_stamp
+        return actor.fallback_pose, None
+
     def _normalize_angle(self, angle: float) -> float:
         return math.atan2(math.sin(angle), math.cos(angle))
 
@@ -690,7 +729,7 @@ class SceneStatePublisher(Node):
     def _publish_scene_state(self) -> None:
         now = self.get_clock().now().to_msg()
 
-        robot_pose, robot_stamp = self._find_entity_pose(self._robot_config.entity_name, self._robot_config.fallback_pose)
+        robot_pose, robot_stamp = self._resolve_actor_pose(self._robot_config)
         if robot_pose is not None:
             robot_linear_x, robot_angular_z, robot_is_moving = self._estimate_actor_motion(
                 self._robot_config.actor_id,
@@ -711,7 +750,7 @@ class SceneStatePublisher(Node):
             robot_msg.is_moving = bool(robot_is_moving)
             self._robot_publisher.publish(robot_msg)
 
-        human_pose, human_stamp = self._find_entity_pose(self._human_config.entity_name, self._human_config.fallback_pose)
+        human_pose, human_stamp = self._resolve_actor_pose(self._human_config)
         if human_pose is not None:
             human_linear_x, human_angular_z, human_is_moving = self._estimate_actor_motion(
                 self._human_config.actor_id,
