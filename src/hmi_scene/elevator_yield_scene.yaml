@@ -27,8 +27,8 @@ models:
     linear_speed: 0.30
     waypoints:
       - [0.000000, 1.200000]
-      - [2.100000, -0.900000]
-      - [-2.100000, -5.100000]
+      - [-1.800000, -0.900000]
+      - [1.800000, -5.100000]
   elevator_assets:
     - aws_robomaker_hospital_elevator_01_car
     - aws_robomaker_hospital_elevator_01_portal
