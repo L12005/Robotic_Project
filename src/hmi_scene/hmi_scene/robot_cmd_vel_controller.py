@@ -47,6 +47,16 @@ class RobotCmdVelController(Node):
             '/hmi/scene/robot_state',
             ParameterDescriptor(description='Robot state topic used as pose feedback for the scene-side controller.'),
         ).value
+        use_robot_state_feedback = bool(
+            self.declare_parameter(
+                'use_robot_state_feedback',
+                False,
+                ParameterDescriptor(
+                    description='Whether to trust /hmi/scene/robot_state as pose feedback. '
+                    'Disabled by default so the controller fully trusts its own integrated pose.'
+                ),
+            ).value
+        )
         update_rate_hz = float(
             self.declare_parameter(
                 'update_rate_hz',
@@ -96,14 +106,17 @@ class RobotCmdVelController(Node):
         self._last_cmd_wall_time_sec = 0.0
         self._last_applied_sim_time_sec: float | None = None
         self._cmd_timeout_sec = max(cmd_timeout_sec, 0.0)
+        self._use_robot_state_feedback = use_robot_state_feedback
 
         self.create_subscription(Twist, cmd_vel_topic, self._on_cmd_vel, 20)
-        self.create_subscription(ActorState, robot_state_topic, self._on_robot_state, 20)
+        if self._use_robot_state_feedback:
+            self.create_subscription(ActorState, robot_state_topic, self._on_robot_state, 20)
         self.create_timer(1.0 / update_rate_hz, self._update_motion)
 
         self.get_logger().info(
             'Robot cmd_vel controller is ready. '
-            f'Entity: {self._command_entity_name}, cmd topic: {cmd_vel_topic}, state topic: {robot_state_topic}.'
+            f'Entity: {self._command_entity_name}, cmd topic: {cmd_vel_topic}, state topic: {robot_state_topic}, '
+            f'use_robot_state_feedback={self._use_robot_state_feedback}.'
         )
 
     def _load_robot_config(self, scene_config_path: Path) -> tuple[str, float, float, float, float, float, float, float]:
@@ -163,6 +176,8 @@ class RobotCmdVelController(Node):
         self._last_cmd_debug_signature = signature
 
     def _on_robot_state(self, msg: ActorState) -> None:
+        if not self._use_robot_state_feedback:
+            return
         if self._should_ignore_robot_state_feedback():
             return
         with self._pose_lock:

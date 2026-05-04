@@ -56,6 +56,11 @@ def generate_launch_description():
             package='hmi_scene',
             executable='robot_cmd_vel_controller',
             name='robot_cmd_vel_controller',
+            parameters=[
+                {
+                    'use_robot_state_feedback': False,
+                }
+            ],
             output='screen',
         ),
         Node(
