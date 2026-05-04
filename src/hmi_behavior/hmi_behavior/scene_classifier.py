@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hmi_behavior.robot_state import AggregatedState, lateral_clearance
+from hmi_behavior.robot_state import AggregatedState, lateral_clearance, select_base_map
 
 
 def classify_scene(
@@ -11,8 +11,9 @@ def classify_scene(
     if context.robot is None:
         return 'unknown'
 
+    map_state = select_base_map(context)
     left_clearance = lateral_clearance(
-        context.map_state,
+        map_state,
         context.robot.x,
         context.robot.y,
         context.robot.yaw,
@@ -20,7 +21,7 @@ def classify_scene(
         max_distance=side_probe_distance,
     )
     right_clearance = lateral_clearance(
-        context.map_state,
+        map_state,
         context.robot.x,
         context.robot.y,
         context.robot.yaw,

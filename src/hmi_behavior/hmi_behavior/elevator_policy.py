@@ -3,13 +3,62 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from hmi_behavior.robot_state import (
-    AggregatedState,
-    MotionTarget,
-    lateral_clearance,
-    segment_is_free,
-    transform_world_to_local,
-)
+from hmi_behavior.robot_state import AggregatedState, MotionTarget, transform_world_to_local
+
+
+def generate_yield_candidates(
+    context: AggregatedState,
+    reverse_distance: float,
+    lateral_offset: float,
+    sample_count: int,
+) -> list[MotionTarget]:
+    if context.robot is None:
+        return []
+
+    direction = _choose_safer_side(context)
+    base_radius = max(0.25, reverse_distance)
+    candidates: list[MotionTarget] = []
+    preferred_angles = [
+        math.pi,
+        math.pi + direction * 0.45,
+        math.pi - direction * 0.45,
+        math.pi + direction * 0.85,
+        math.pi - direction * 0.85,
+    ]
+
+    for angle in preferred_angles:
+        candidates.append(
+            MotionTarget(
+                x=context.robot.x + math.cos(context.robot.yaw + angle) * base_radius
+                - math.sin(context.robot.yaw + angle) * (direction * lateral_offset * 0.5),
+                y=context.robot.y + math.sin(context.robot.yaw + angle) * base_radius
+                + math.cos(context.robot.yaw + angle) * (direction * lateral_offset * 0.5),
+                reverse_ok=True,
+                source='elevator_policy',
+            )
+        )
+
+    for index in range(sample_count):
+        angle = math.pi - (2.0 * math.pi * index / max(1, sample_count))
+        candidates.append(
+            MotionTarget(
+                x=context.robot.x + math.cos(context.robot.yaw + angle) * base_radius,
+                y=context.robot.y + math.sin(context.robot.yaw + angle) * base_radius,
+                reverse_ok=True,
+                source='elevator_policy',
+            )
+        )
+
+    # Remove duplicates while preserving order.
+    unique: list[MotionTarget] = []
+    seen: set[tuple[int, int]] = set()
+    for candidate in candidates:
+        key = (round(candidate.x * 100.0), round(candidate.y * 100.0))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
 
 
 def plan_yield_goal(
@@ -18,58 +67,16 @@ def plan_yield_goal(
     lateral_offset: float,
     side_probe_distance: float,
 ) -> Optional[MotionTarget]:
-    return plan_named_yield_goal(
+    candidates = generate_yield_candidates(
         context,
         reverse_distance=reverse_distance,
         lateral_offset=lateral_offset,
-        side_probe_distance=side_probe_distance,
-        source='elevator_policy',
+        sample_count=max(8, int(side_probe_distance * 8.0)),
     )
+    return candidates[0] if candidates else None
 
 
-def plan_named_yield_goal(
-    context: AggregatedState,
-    reverse_distance: float,
-    lateral_offset: float,
-    side_probe_distance: float,
-    source: str,
-) -> Optional[MotionTarget]:
-    return _plan_common_yield_goal(
-        context,
-        reverse_distance=reverse_distance,
-        lateral_offset=lateral_offset,
-        side_probe_distance=side_probe_distance,
-        source=source,
-    )
-
-
-def _plan_common_yield_goal(
-    context: AggregatedState,
-    reverse_distance: float,
-    lateral_offset: float,
-    side_probe_distance: float,
-    source: str,
-) -> Optional[MotionTarget]:
-    if context.robot is None:
-        return None
-
-    direction = _choose_safer_side(context, side_probe_distance)
-    backward_x = context.robot.x - math.cos(context.robot.yaw) * reverse_distance
-    backward_y = context.robot.y - math.sin(context.robot.yaw) * reverse_distance
-
-    target_x = backward_x - math.sin(context.robot.yaw) * direction * lateral_offset
-    target_y = backward_y + math.cos(context.robot.yaw) * direction * lateral_offset
-
-    if not segment_is_free(context.map_state, context.robot.x, context.robot.y, target_x, target_y):
-        target_x = backward_x
-        target_y = backward_y
-        if not segment_is_free(context.map_state, context.robot.x, context.robot.y, target_x, target_y):
-            return None
-
-    return MotionTarget(x=target_x, y=target_y, reverse_ok=True, source=source)
-
-
-def _choose_safer_side(context: AggregatedState, side_probe_distance: float) -> int:
+def _choose_safer_side(context: AggregatedState) -> int:
     if context.robot is None:
         return 1
 
@@ -79,24 +86,30 @@ def _choose_safer_side(context: AggregatedState, side_probe_distance: float) -> 
     else:
         preferred = 1
 
-    left_clearance = lateral_clearance(
-        context.map_state,
-        context.robot.x,
-        context.robot.y,
-        context.robot.yaw,
-        side_sign=1,
-        max_distance=side_probe_distance,
-    )
-    right_clearance = lateral_clearance(
-        context.map_state,
-        context.robot.x,
-        context.robot.y,
-        context.robot.yaw,
-        side_sign=-1,
-        max_distance=side_probe_distance,
-    )
+    left_clearance = _side_clearance(context, side_sign=1)
+    right_clearance = _side_clearance(context, side_sign=-1)
     if preferred == 1 and left_clearance >= 0.3:
         return 1
     if preferred == -1 and right_clearance >= 0.3:
         return -1
     return 1 if left_clearance >= right_clearance else -1
+
+
+def _side_clearance(context: AggregatedState, side_sign: int) -> float:
+    if context.robot is None:
+        return 0.0
+    if context.static_map is None and context.map_state is None:
+        return 1.0
+
+    map_state = context.static_map if context.static_map is not None else context.map_state
+    assert map_state is not None
+    from hmi_behavior.robot_state import lateral_clearance
+
+    return lateral_clearance(
+        map_state,
+        context.robot.x,
+        context.robot.y,
+        context.robot.yaw,
+        side_sign=side_sign,
+        max_distance=1.0,
+    )

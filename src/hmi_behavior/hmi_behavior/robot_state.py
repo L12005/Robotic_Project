@@ -97,6 +97,7 @@ class MotionTarget:
 class AggregatedState:
     robot: Optional[ActorSnapshot] = None
     human: Optional[ActorSnapshot] = None
+    static_map: Optional[OccupancyGrid] = None
     map_state: Optional[OccupancyGrid] = None
     goal: Optional[GoalSnapshot] = None
     obstacles: Dict[str, ObstacleSnapshot] = field(default_factory=dict)
@@ -196,3 +197,9 @@ def lateral_clearance(
             return max(0.0, distance - step)
         distance += step
     return max_distance
+
+
+def select_base_map(context: AggregatedState) -> Optional[OccupancyGrid]:
+    if context.static_map is not None:
+        return context.static_map
+    return context.map_state

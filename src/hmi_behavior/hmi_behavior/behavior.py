@@ -35,10 +35,15 @@ class BehaviorNode(Node):
             '/hmi/scene/obstacle_state',
             ParameterDescriptor(description='Input topic for obstacle overlays.'),
         ).value
+        static_map_topic = self.declare_parameter(
+            'static_map_topic',
+            '/hmi/scene/static_map',
+            ParameterDescriptor(description='Primary static OccupancyGrid topic for A* planning.'),
+        ).value
         map_state_topic = self.declare_parameter(
             'map_state_topic',
             '/hmi/scene/map_state',
-            ParameterDescriptor(description='Input topic for static map.'),
+            ParameterDescriptor(description='Fallback OccupancyGrid topic if static_map is unavailable.'),
         ).value
         goal_topic = self.declare_parameter(
             'goal_topic',
@@ -67,6 +72,7 @@ class BehaviorNode(Node):
         self.create_subscription(ActorState, robot_state_topic, self._on_robot_state, 10)
         self.create_subscription(ActorState, human_state_topic, self._on_human_state, 10)
         self.create_subscription(ObstacleState, obstacle_state_topic, self._on_obstacle_state, 50)
+        self.create_subscription(OccupancyGrid, static_map_topic, self._on_static_map, 10)
         self.create_subscription(OccupancyGrid, map_state_topic, self._on_map_state, 10)
         self.create_subscription(PoseStamped, goal_topic, self._on_goal_pose, 10)
 
@@ -75,8 +81,9 @@ class BehaviorNode(Node):
         self.create_timer(1.0 / control_rate_hz, self._tick)
 
         self.get_logger().info(
-            'hmi_behavior started. Waiting for /hmi/scene inputs and future goal poses on '
-            f'{goal_topic}.'
+            'hmi_behavior started. Waiting for scene inputs on '
+            f'{robot_state_topic}, {human_state_topic}, {obstacle_state_topic}, '
+            f'{static_map_topic} (primary) / {map_state_topic} (fallback), and future goal poses on {goal_topic}.'
         )
 
     def _declare_and_load_config(self) -> ControllerConfig:
@@ -103,6 +110,12 @@ class BehaviorNode(Node):
             heading_slow_threshold=self.declare_parameter('heading_slow_threshold', 0.50).value,
             heading_stop_threshold=self.declare_parameter('heading_stop_threshold', 1.20).value,
             resume_duration=self.declare_parameter('resume_duration', 1.20).value,
+            path_lookahead_distance=self.declare_parameter('path_lookahead_distance', 0.35).value,
+            dynamic_obstacle_inflation=self.declare_parameter('dynamic_obstacle_inflation', 0.18).value,
+            human_body_radius=self.declare_parameter('human_body_radius', 0.40).value,
+            human_forward_min_depth=self.declare_parameter('human_forward_min_depth', 0.35).value,
+            yield_sample_count=self.declare_parameter('yield_sample_count', 16).value,
+            planner_occupancy_threshold=self.declare_parameter('planner_occupancy_threshold', 50).value,
         )
 
     def _on_robot_state(self, msg: ActorState) -> None:
@@ -115,6 +128,9 @@ class BehaviorNode(Node):
         snapshot = ObstacleSnapshot.from_msg(msg)
         obstacle_id = snapshot.obstacle_id or f'obstacle_{len(self._world_state.obstacles)}'
         self._world_state.obstacles[obstacle_id] = snapshot
+
+    def _on_static_map(self, msg: OccupancyGrid) -> None:
+        self._world_state.static_map = msg
 
     def _on_map_state(self, msg: OccupancyGrid) -> None:
         self._world_state.map_state = msg
