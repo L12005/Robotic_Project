@@ -195,7 +195,8 @@ class BehaviorNode(Node):
         self._last_debug_signature = signature
 
     def destroy_node(self) -> bool:
-        self._publish_zero_velocity()
+        if self.context.ok():
+            self._publish_zero_velocity()
         return super().destroy_node()
 
     def _publish_zero_velocity(self) -> None:
@@ -212,4 +213,5 @@ def main(args: Optional[list[str]] = None) -> None:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
