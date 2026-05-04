@@ -66,7 +66,28 @@ class ActorForwardTestController(Node):
             self.declare_parameter(
                 'travel_distance',
                 6.20,
-                ParameterDescriptor(description='Total forward travel distance in meters for the moving human test.'),
+                ParameterDescriptor(description='Fallback forward travel distance in meters when no waypoints are configured.'),
+            ).value
+        )
+        self._turn_speed = float(
+            self.declare_parameter(
+                'turn_speed_rad_s',
+                1.0,
+                ParameterDescriptor(description='In-place turning speed in radians per second toward the next waypoint.'),
+            ).value
+        )
+        self._position_tolerance = float(
+            self.declare_parameter(
+                'position_tolerance_m',
+                0.03,
+                ParameterDescriptor(description='Distance tolerance in meters for considering a waypoint reached.'),
+            ).value
+        )
+        self._yaw_tolerance = float(
+            self.declare_parameter(
+                'yaw_tolerance_rad',
+                0.03,
+                ParameterDescriptor(description='Yaw tolerance in radians for considering a turn complete.'),
             ).value
         )
         self._stride_length = float(
@@ -105,7 +126,14 @@ class ActorForwardTestController(Node):
             ).value
         )
 
-        self._start_x, self._start_y, self._visual_z, self._start_yaw, self._collision_z = self._load_scene_poses(scene_config_path)
+        (
+            self._start_x,
+            self._start_y,
+            self._visual_z,
+            self._start_yaw,
+            self._collision_z,
+            self._waypoints,
+        ) = self._load_scene_poses(scene_config_path)
         self._set_pose_service = f'/world/{self._world_name}/set_pose'
         self._stats_topic = f'/world/{self._world_name}/stats'
         self._set_pose_client = self.create_client(SetEntityPose, self._set_pose_service)
@@ -124,6 +152,11 @@ class ActorForwardTestController(Node):
         self._motion_start_sim_time: float | None = None
         self._latest_sim_time_sec: float | None = None
         self._last_motion_sim_time: float | None = None
+        self._current_x = self._start_x
+        self._current_y = self._start_y
+        self._current_yaw = self._start_yaw
+        self._waypoint_index = 0
+        self._motion_phase = 'turn'
         self._travelled_distance = 0.0
         self._completed = False
 
@@ -132,10 +165,10 @@ class ActorForwardTestController(Node):
             'Human motion controller is ready. '
             f'Initial visual entity: {self._visual_entity_name}, collision entity: {self._collision_entity_name}, '
             f'speed: {self._linear_speed:.2f} m/s, '
-            f'distance: {self._travel_distance:.2f} m.'
+            f'waypoints: {len(self._waypoints)}.'
         )
 
-    def _load_scene_poses(self, scene_config_path: Path) -> tuple[float, float, float, float, float]:
+    def _load_scene_poses(self, scene_config_path: Path) -> tuple[float, float, float, float, float, list[tuple[float, float]]]:
         if not scene_config_path.is_file():
             raise FileNotFoundError(f'Scene config not found: {scene_config_path}')
 
@@ -151,6 +184,7 @@ class ActorForwardTestController(Node):
         human_pose = human.get('pose', [])
         if not isinstance(human_pose, list) or len(human_pose) < 6:
             raise ValueError('models.human.pose must contain [x, y, z, roll, pitch, yaw].')
+        waypoints = self._parse_waypoints(human, human_pose)
 
         obstacles = models.get('obstacles', [])
         if not isinstance(obstacles, list):
@@ -176,7 +210,31 @@ class ActorForwardTestController(Node):
             float(human_pose[2]),
             float(human_pose[5]),
             float(collision_pose[2]),
+            waypoints,
         )
+
+    def _parse_waypoints(self, human: dict[str, Any], human_pose: list[Any]) -> list[tuple[float, float]]:
+        raw_waypoints = human.get('waypoints', [])
+        if raw_waypoints is None:
+            raw_waypoints = []
+        if not isinstance(raw_waypoints, list):
+            raise ValueError('models.human.waypoints must be a list of [x, y] points.')
+
+        waypoints: list[tuple[float, float]] = []
+        for item in raw_waypoints:
+            if not isinstance(item, list) or len(item) < 2:
+                raise ValueError('Each human waypoint must be [x, y].')
+            waypoints.append((float(item[0]), float(item[1])))
+
+        if waypoints:
+            return waypoints
+
+        start_x = float(human_pose[0])
+        start_y = float(human_pose[1])
+        start_yaw = float(human_pose[5])
+        fallback_x = start_x + math.cos(start_yaw) * self._travel_distance
+        fallback_y = start_y + math.sin(start_yaw) * self._travel_distance
+        return [(fallback_x, fallback_y)]
 
     def _run_stats_reader(self) -> None:
         command = [
@@ -261,6 +319,7 @@ class ActorForwardTestController(Node):
             self._simulation_started = True
             self._motion_start_sim_time = sim_time_sec
             self._last_motion_sim_time = sim_time_sec
+            self._set_entity_poses(self._current_x, self._current_y, self._current_yaw)
             self._publish_joint_commands(0.0)
             return
 
@@ -280,26 +339,57 @@ class ActorForwardTestController(Node):
         if dt <= 0.0:
             return
 
-        remaining = self._travel_distance - self._travelled_distance
-        if remaining <= 1e-6:
+        if self._waypoint_index >= len(self._waypoints):
+            self._set_entity_poses(self._current_x, self._current_y, self._current_yaw)
             self._publish_joint_commands(0.0)
             self._completed = True
             self.get_logger().info('Human motion test completed.')
             return
 
-        step = min(self._linear_speed * dt, remaining)
-        self._travelled_distance += step
-
         self._pending_pose_futures = [future for future in self._pending_pose_futures if not future.done()]
         if len(self._pending_pose_futures) >= 4:
             return
 
-        x = self._start_x + math.cos(self._start_yaw) * self._travelled_distance
-        y = self._start_y + math.sin(self._start_yaw) * self._travelled_distance
-        self._set_entity_poses(x, y)
+        target_x, target_y = self._waypoints[self._waypoint_index]
+        dx = target_x - self._current_x
+        dy = target_y - self._current_y
+        target_yaw = math.atan2(dy, dx) if math.hypot(dx, dy) > 1e-9 else self._current_yaw
+
+        if self._motion_phase == 'turn':
+            yaw_error = self._normalize_angle(target_yaw - self._current_yaw)
+            if abs(yaw_error) <= self._yaw_tolerance:
+                self._current_yaw = target_yaw
+                self._motion_phase = 'walk'
+            else:
+                yaw_step = min(self._turn_speed * dt, abs(yaw_error))
+                self._current_yaw = self._normalize_angle(self._current_yaw + math.copysign(yaw_step, yaw_error))
+            self._set_entity_poses(self._current_x, self._current_y, self._current_yaw)
+            self._publish_joint_commands(0.0)
+            return
+
+        distance_to_target = math.hypot(dx, dy)
+        if distance_to_target <= self._position_tolerance:
+            self._current_x = target_x
+            self._current_y = target_y
+            self._current_yaw = target_yaw
+            self._waypoint_index += 1
+            self._motion_phase = 'turn'
+            self._set_entity_poses(self._current_x, self._current_y, self._current_yaw)
+            self._publish_joint_commands(0.0)
+            return
+
+        step = min(self._linear_speed * dt, distance_to_target)
+        direction_x = dx / max(distance_to_target, 1e-9)
+        direction_y = dy / max(distance_to_target, 1e-9)
+        self._current_x += direction_x * step
+        self._current_y += direction_y * step
+        self._current_yaw = target_yaw
+        self._travelled_distance += step
+
+        self._set_entity_poses(self._current_x, self._current_y, self._current_yaw)
         self._publish_joint_commands(self._travelled_distance)
 
-    def _set_entity_poses(self, x: float, y: float) -> None:
+    def _set_entity_poses(self, x: float, y: float, yaw: float) -> None:
         if not self._set_pose_client.service_is_ready():
             if not self._warned_service_unavailable:
                 self.get_logger().info(f'Waiting for ROS bridge service {self._set_pose_service}...')
@@ -307,8 +397,8 @@ class ActorForwardTestController(Node):
             return
         self._warned_service_unavailable = False
 
-        visual_quaternion = self._quaternion_from_rpy(0.0, 0.0, self._start_yaw)
-        collision_quaternion = self._quaternion_from_rpy(0.0, 0.0, self._start_yaw)
+        visual_quaternion = self._quaternion_from_rpy(0.0, 0.0, yaw)
+        collision_quaternion = self._quaternion_from_rpy(0.0, 0.0, yaw)
 
         visual_request = self._make_pose_request(
             self._visual_entity_name,
@@ -376,6 +466,9 @@ class ActorForwardTestController(Node):
             cr * cp * sy - sr * sp * cy,
             cr * cp * cy + sr * sp * sy,
         )
+
+    def _normalize_angle(self, angle: float) -> float:
+        return math.atan2(math.sin(angle), math.cos(angle))
 
     def _stop_process(self, process: subprocess.Popen[str]) -> None:
         if process.poll() is not None:

@@ -23,6 +23,8 @@ models:
     mesh_source: human_actor/meshes/walk.dae
     pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
     linear_speed: 0.30
+    waypoints:
+      - [0.216946, -1.778999]
   elevator_assets:
     - aws_robomaker_hospital_elevator_01_car
     - aws_robomaker_hospital_elevator_01_portal

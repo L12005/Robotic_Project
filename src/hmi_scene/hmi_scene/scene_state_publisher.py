@@ -25,6 +25,7 @@ class ActorConfig:
     actor_id: str
     actor_type: str
     fallback_pose: tuple[float, float, float] | None
+    fallback_linear_speed: float
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,11 @@ class SceneStatePublisher(Node):
             '/world/elevator_yield/pose/info',
             ParameterDescriptor(description='Gazebo pose topic used as the direct source of scene state.'),
         ).value
+        stats_topic = self.declare_parameter(
+            'gazebo_stats_topic',
+            '/world/elevator_yield/stats',
+            ParameterDescriptor(description='Gazebo stats topic used to detect whether the simulation is paused.'),
+        ).value
         frame_id = self.declare_parameter(
             'frame_id',
             'world',
@@ -89,6 +95,33 @@ class SceneStatePublisher(Node):
                 'publish_rate_hz',
                 10.0,
                 ParameterDescriptor(description='Publishing rate for scene state topics in Hz.'),
+            ).value
+        )
+        motion_stale_timeout_sec = float(
+            self.declare_parameter(
+                'motion_stale_timeout_sec',
+                0.35,
+                ParameterDescriptor(
+                    description='If no actual pose change is detected for this long, treat the actor as stopped.'
+                ),
+            ).value
+        )
+        motion_position_epsilon_m = float(
+            self.declare_parameter(
+                'motion_position_epsilon_m',
+                0.002,
+                ParameterDescriptor(
+                    description='Minimum xy pose change in meters needed to consider an actor moving.'
+                ),
+            ).value
+        )
+        motion_yaw_epsilon_rad = float(
+            self.declare_parameter(
+                'motion_yaw_epsilon_rad',
+                0.01,
+                ParameterDescriptor(
+                    description='Minimum yaw change in radians needed to consider an actor moving.'
+                ),
             ).value
         )
 
@@ -109,10 +142,21 @@ class SceneStatePublisher(Node):
 
         self._frame_id = str(frame_id)
         self._gazebo_pose_topic = str(pose_topic)
+        self._gazebo_stats_topic = str(stats_topic)
+        self._motion_stale_timeout_sec = max(float(motion_stale_timeout_sec), 0.05)
+        self._motion_position_epsilon_m = max(float(motion_position_epsilon_m), 0.0)
+        self._motion_yaw_epsilon_rad = max(float(motion_yaw_epsilon_rad), 0.0)
         self._latest_poses: dict[str, tuple[float, float, float]] = {}
+        self._latest_pose_stamps: dict[str, float] = {}
+        self._last_actor_pose_samples: dict[str, tuple[float, float, float, float]] = {}
+        self._last_actor_motion_times: dict[str, float] = {}
         self._pose_lock = threading.Lock()
+        self._stats_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._pose_reader_process: subprocess.Popen[str] | None = None
+        self._stats_reader_process: subprocess.Popen[str] | None = None
+        self._gazebo_is_paused = True
+        self._latest_sim_time_sec: float | None = None
         self._static_map_data = self._build_static_map_data()
 
         self._robot_publisher = self.create_publisher(ActorState, robot_topic, 10)
@@ -122,18 +166,33 @@ class SceneStatePublisher(Node):
         self._static_map_publisher = self.create_publisher(OccupancyGrid, static_map_topic, 10)
 
         self._pose_reader_thread = threading.Thread(target=self._run_pose_reader, daemon=True)
+        self._stats_reader_thread = threading.Thread(target=self._run_stats_reader, daemon=True)
         self._pose_reader_thread.start()
+        self._stats_reader_thread.start()
         self.create_timer(1.0 / publish_rate_hz, self._publish_scene_state)
         self.get_logger().info(
             'Publishing scene state from Gazebo topic '
             f'{pose_topic} to {robot_topic}, {human_topic}, {obstacle_topic}, {map_topic}, and {static_map_topic}.'
         )
+        self.get_logger().info(f'Gazebo play/pause state is read from {stats_topic}.')
         self.get_logger().info(f'Static scene metadata is loaded from {scene_config_path}.')
         self.get_logger().info(
             'Map grid configured as '
             f'{self._map_config.width}x{self._map_config.height} cells at '
             f'{self._map_config.resolution:.3f} m/cell from origin '
             f'({self._map_config.origin_x:.2f}, {self._map_config.origin_y:.2f}).'
+        )
+        self.get_logger().info(
+            'Actor motion publishes fixed configured speed only while actual pose changes '
+            f'continue within {self._motion_stale_timeout_sec:.2f} s.'
+        )
+        self.get_logger().info(
+            'Actor motion is detected with thresholds '
+            f'{self._motion_position_epsilon_m:.4f} m and {self._motion_yaw_epsilon_rad:.4f} rad.'
+        )
+        self.get_logger().info(
+            'Actor motion is forced to static when no pose change is detected for more than '
+            f'{self._motion_stale_timeout_sec:.2f} s.'
         )
 
     def _load_scene_config(
@@ -151,22 +210,27 @@ class SceneStatePublisher(Node):
         human = self._expect_mapping(models, 'human')
         walls = models.get('walls', [])
         obstacles = models.get('obstacles', [])
+        map_static_boxes = models.get('map_static_boxes', [])
         if not isinstance(walls, list):
             raise ValueError('models.walls must be a list in the scene config.')
         if not isinstance(obstacles, list):
             raise ValueError('models.obstacles must be a list in the scene config.')
+        if not isinstance(map_static_boxes, list):
+            raise ValueError('models.map_static_boxes must be a list in the scene config.')
 
         robot_config = ActorConfig(
             entity_name=str(robot.get('entity_name', robot.get('name', 'turtlebot3_burger_ir'))),
             actor_id=str(robot.get('name', 'turtlebot3_burger_ir')),
             actor_type=str(robot.get('actor_type', 'robot')),
             fallback_pose=self._parse_pose_entry(robot),
+            fallback_linear_speed=float(robot.get('linear_speed', 0.0)),
         )
         human_config = ActorConfig(
             entity_name=str(human.get('entity_name', human.get('name', 'human_in_elevator'))),
             actor_id=str(human.get('name', 'human_in_elevator')),
             actor_type=str(human.get('actor_type', 'human')),
             fallback_pose=self._parse_pose_entry(human),
+            fallback_linear_speed=float(human.get('linear_speed', 0.0)),
         )
 
         map_config = self._parse_map_config(data.get('map', {}))
@@ -181,6 +245,16 @@ class SceneStatePublisher(Node):
             )
             for item in walls
         ]
+        static_boxes.extend(
+            [
+                self._parse_box(
+                    item,
+                    default_name='map_static_box',
+                    inflate_radius=map_config.static_inflation_radius,
+                )
+                for item in map_static_boxes
+            ]
+        )
         dynamic_boxes: list[BoxConfig] = []
         for item in obstacles:
             obstacle = self._parse_obstacle(item)
@@ -257,7 +331,7 @@ class SceneStatePublisher(Node):
             size_x=float(size[0]),
             size_y=float(size[1]),
             fallback_pose=self._parse_pose_entry(data),
-            inflate_radius=inflate_radius,
+            inflate_radius=float(data.get('inflate_radius', inflate_radius)),
         )
 
     def _parse_pose_entry(self, data: dict[str, Any]) -> tuple[float, float, float] | None:
@@ -323,6 +397,63 @@ class SceneStatePublisher(Node):
                 self.get_logger().warning('Gazebo pose reader exited and will retry.')
             time.sleep(1.0)
 
+    def _run_stats_reader(self) -> None:
+        command = [
+            'gz',
+            'topic',
+            '-e',
+            '-t',
+            self._gazebo_stats_topic,
+            '--json-output',
+        ]
+        while not self._stop_event.is_set():
+            try:
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                )
+            except FileNotFoundError:
+                self.get_logger().error('Could not find the `gz` executable needed to read Gazebo stats.')
+                return
+
+            self._stats_reader_process = process
+            self.get_logger().info(f'Started Gazebo stats reader: {" ".join(command)}')
+
+            stderr_output = ''
+            try:
+                if process.stdout is None:
+                    raise RuntimeError('Gazebo stats reader has no stdout stream.')
+
+                for line in process.stdout:
+                    if self._stop_event.is_set():
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    self._on_stats_json_line(line)
+            except Exception as error:
+                self.get_logger().warning(f'Gazebo stats reader hit an error: {error}')
+            finally:
+                if process.stdout is not None:
+                    process.stdout.close()
+                if process.stderr is not None:
+                    stderr_output = process.stderr.read().strip()
+                    process.stderr.close()
+                self._stop_process(process)
+                if self._stats_reader_process is process:
+                    self._stats_reader_process = None
+
+            if self._stop_event.is_set():
+                break
+            if stderr_output:
+                self.get_logger().warning(f'Gazebo stats reader exited and will retry: {stderr_output}')
+            else:
+                self.get_logger().warning('Gazebo stats reader exited and will retry.')
+            time.sleep(1.0)
+
     def _stop_process(self, process: subprocess.Popen[str]) -> None:
         if process.poll() is not None:
             return
@@ -340,6 +471,8 @@ class SceneStatePublisher(Node):
             return
 
         latest_poses: dict[str, tuple[float, float, float]] = {}
+        latest_pose_stamps: dict[str, float] = {}
+        receive_time_sec = time.monotonic()
         for pose in poses:
             if not isinstance(pose, dict):
                 continue
@@ -370,32 +503,99 @@ class SceneStatePublisher(Node):
                 float(position.get('y', 0.0)),
                 float(yaw),
             )
+            latest_pose_stamps[entity_name] = receive_time_sec
 
         with self._pose_lock:
             self._latest_poses = latest_poses
+            self._latest_pose_stamps = latest_pose_stamps
+
+    def _on_stats_json_line(self, line: str) -> None:
+        data = json.loads(line)
+        sim_time = data.get('simTime', {})
+        if not isinstance(sim_time, dict):
+            return
+        sec = float(sim_time.get('sec', 0.0))
+        nsec = float(sim_time.get('nsec', 0.0))
+        sim_time_sec = sec + nsec * 1e-9
+        with self._stats_lock:
+            if self._latest_sim_time_sec is None:
+                self._gazebo_is_paused = sim_time_sec <= 0.0
+            else:
+                self._gazebo_is_paused = abs(sim_time_sec - self._latest_sim_time_sec) <= 1e-9
+            self._latest_sim_time_sec = sim_time_sec
 
     def _find_entity_pose(
         self,
         entity_name: str,
         fallback_pose: tuple[float, float, float] | None,
-    ) -> tuple[float, float, float] | None:
+    ) -> tuple[tuple[float, float, float] | None, float | None]:
         with self._pose_lock:
             exact_pose = self._latest_poses.get(entity_name)
+            exact_stamp = self._latest_pose_stamps.get(entity_name)
         if exact_pose is not None:
-            return exact_pose
+            return exact_pose, exact_stamp
 
         prefix = entity_name + '::'
         with self._pose_lock:
             latest_poses = dict(self._latest_poses)
+            latest_pose_stamps = dict(self._latest_pose_stamps)
         for pose_name, pose in latest_poses.items():
             if pose_name.startswith(prefix):
-                return pose
-        return fallback_pose
+                return pose, latest_pose_stamps.get(pose_name)
+        return fallback_pose, None
+
+    def _normalize_angle(self, angle: float) -> float:
+        return math.atan2(math.sin(angle), math.cos(angle))
+
+    def _is_simulation_paused(self) -> bool:
+        with self._stats_lock:
+            return self._gazebo_is_paused
+
+    def _estimate_actor_motion(
+        self,
+        actor_key: str,
+        pose: tuple[float, float, float],
+        stamp_sec: float | None,
+        fallback_linear_speed: float,
+    ) -> tuple[float, float, bool]:
+        if stamp_sec is None:
+            return 0.0, 0.0, False
+
+        if self._is_simulation_paused():
+            return 0.0, 0.0, False
+
+        previous_sample = self._last_actor_pose_samples.get(actor_key)
+        self._last_actor_pose_samples[actor_key] = (pose[0], pose[1], pose[2], stamp_sec)
+
+        if previous_sample is None:
+            self._last_actor_motion_times.setdefault(actor_key, time.monotonic())
+
+        if previous_sample is not None:
+            dx = pose[0] - previous_sample[0]
+            dy = pose[1] - previous_sample[1]
+            dyaw = self._normalize_angle(pose[2] - previous_sample[2])
+            moved = (
+                math.hypot(dx, dy) >= self._motion_position_epsilon_m or
+                abs(dyaw) >= self._motion_yaw_epsilon_rad
+            )
+            if moved:
+                self._last_actor_motion_times[actor_key] = time.monotonic()
+
+        last_motion_time = self._last_actor_motion_times.get(actor_key)
+        if last_motion_time is None:
+            return 0.0, 0.0, False
+        if time.monotonic() - last_motion_time > self._motion_stale_timeout_sec:
+            return 0.0, 0.0, False
+
+        linear_speed = abs(float(fallback_linear_speed))
+        is_moving = linear_speed > 1e-3
+        return linear_speed, 0.0, is_moving
 
     def _build_static_map_data(self) -> list[int]:
         grid = [0] * (self._map_config.width * self._map_config.height)
         for box in self._static_boxes:
-            pose = self._find_entity_pose(box.entity_name, box.fallback_pose) or box.fallback_pose
+            pose, _ = self._find_entity_pose(box.entity_name, box.fallback_pose)
+            pose = pose or box.fallback_pose
             if pose is None:
                 continue
             self._mark_box_on_grid(
@@ -412,7 +612,7 @@ class SceneStatePublisher(Node):
     def _build_dynamic_map_data(self) -> list[int]:
         grid = list(self._static_map_data)
         for box in self._dynamic_boxes:
-            pose = self._find_entity_pose(box.entity_name, box.fallback_pose)
+            pose, _ = self._find_entity_pose(box.entity_name, box.fallback_pose)
             if pose is None:
                 continue
             self._mark_box_on_grid(
@@ -490,8 +690,14 @@ class SceneStatePublisher(Node):
     def _publish_scene_state(self) -> None:
         now = self.get_clock().now().to_msg()
 
-        robot_pose = self._find_entity_pose(self._robot_config.entity_name, self._robot_config.fallback_pose)
+        robot_pose, robot_stamp = self._find_entity_pose(self._robot_config.entity_name, self._robot_config.fallback_pose)
         if robot_pose is not None:
+            robot_linear_x, robot_angular_z, robot_is_moving = self._estimate_actor_motion(
+                self._robot_config.actor_id,
+                robot_pose,
+                robot_stamp,
+                self._robot_config.fallback_linear_speed,
+            )
             robot_msg = ActorState()
             robot_msg.header.stamp = now
             robot_msg.header.frame_id = self._frame_id
@@ -500,13 +706,19 @@ class SceneStatePublisher(Node):
             robot_msg.x = robot_pose[0]
             robot_msg.y = robot_pose[1]
             robot_msg.yaw = robot_pose[2]
-            robot_msg.linear_x = 0.0
-            robot_msg.angular_z = 0.0
-            robot_msg.is_moving = False
+            robot_msg.linear_x = float(robot_linear_x)
+            robot_msg.angular_z = float(robot_angular_z)
+            robot_msg.is_moving = bool(robot_is_moving)
             self._robot_publisher.publish(robot_msg)
 
-        human_pose = self._find_entity_pose(self._human_config.entity_name, self._human_config.fallback_pose)
+        human_pose, human_stamp = self._find_entity_pose(self._human_config.entity_name, self._human_config.fallback_pose)
         if human_pose is not None:
+            human_linear_x, human_angular_z, human_is_moving = self._estimate_actor_motion(
+                self._human_config.actor_id,
+                human_pose,
+                human_stamp,
+                self._human_config.fallback_linear_speed,
+            )
             human_msg = ActorState()
             human_msg.header.stamp = now
             human_msg.header.frame_id = self._frame_id
@@ -515,13 +727,13 @@ class SceneStatePublisher(Node):
             human_msg.x = human_pose[0]
             human_msg.y = human_pose[1]
             human_msg.yaw = human_pose[2]
-            human_msg.linear_x = 0.0
-            human_msg.angular_z = 0.0
-            human_msg.is_moving = False
+            human_msg.linear_x = float(human_linear_x)
+            human_msg.angular_z = float(human_angular_z)
+            human_msg.is_moving = bool(human_is_moving)
             self._human_publisher.publish(human_msg)
 
         for obstacle in self._obstacle_configs:
-            obstacle_pose = self._find_entity_pose(obstacle.entity_name, obstacle.fallback_pose)
+            obstacle_pose, _ = self._find_entity_pose(obstacle.entity_name, obstacle.fallback_pose)
             if obstacle_pose is None:
                 continue
 
@@ -543,8 +755,12 @@ class SceneStatePublisher(Node):
         self._stop_event.set()
         if self._pose_reader_process is not None:
             self._stop_process(self._pose_reader_process)
+        if self._stats_reader_process is not None:
+            self._stop_process(self._stats_reader_process)
         if self._pose_reader_thread.is_alive():
             self._pose_reader_thread.join(timeout=2.0)
+        if self._stats_reader_thread.is_alive():
+            self._stats_reader_thread.join(timeout=2.0)
         return super().destroy_node()
 
 
