@@ -27,18 +27,18 @@
       <static>true</static>
       <link name="link">
         <collision name="collision">
-          <pose>0 0 -0.03 0 0 0</pose>
+          <pose>0 -5 -0.03 0 0 0</pose>
           <geometry>
             <box>
-              <size>10 10 0.06</size>
+              <size>10 20 0.06</size>
             </box>
           </geometry>
         </collision>
         <visual name="visual">
-          <pose>0 0 -0.03 0 0 0</pose>
+          <pose>0 -5 -0.03 0 0 0</pose>
           <geometry>
             <box>
-              <size>10 10 0.06</size>
+              <size>10 20 0.06</size>
             </box>
           </geometry>
           <material>
@@ -53,7 +53,7 @@
     <include>
       <uri>model://turtlebot3_burger_ir</uri>
       <name>turtlebot3_burger_ir</name>
-      <pose>0.00 0.15 0.012 0 0 1.570796</pose>
+      <pose>0.00 -4.85 0.012 0 0 1.570796</pose>
     </include>
 
     <model name="elevator_car">
