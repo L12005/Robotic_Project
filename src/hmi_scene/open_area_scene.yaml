@@ -1,7 +1,7 @@
 scene_name: open_area
 description: >
-  Open 20x20 floor scene with one robot and four moving pedestrians.
-  There are no walls or elevator assets. Pedestrian collision proxies are the
+  Open 20x20 floor scene with one robot and one moving pedestrian.
+  There are no walls or elevator assets. The pedestrian collision proxy is the
   only dynamic obstacles for robot planning.
 
 map:
@@ -22,29 +22,14 @@ models:
   human:
     name: pedestrian_1
     entity_name: pedestrian_1
-    pose: [-5.50, 7.00, 0.474502, 0.0, 0.0, -0.785398]
-    linear_speed: 0.28
+    pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
+    linear_speed: 0.32
   walls: []
   map_static_boxes: []
   obstacles:
     - name: pedestrian_1_collision_proxy
       entity_name: pedestrian_1_collision_proxy
-      pose: [-5.50, 7.00, 0.960000, 0.0, 0.0, -0.785398]
-      size: [0.95, 0.60, 1.72]
-      is_static: false
-    - name: pedestrian_2_collision_proxy
-      entity_name: pedestrian_2_collision_proxy
-      pose: [5.50, 6.20, 0.960000, 0.0, 0.0, -2.356194]
-      size: [0.95, 0.60, 1.72]
-      is_static: false
-    - name: pedestrian_3_collision_proxy
-      entity_name: pedestrian_3_collision_proxy
-      pose: [-7.20, -1.20, 0.960000, 0.0, 0.0, 0.643501]
-      size: [0.95, 0.60, 1.72]
-      is_static: false
-    - name: pedestrian_4_collision_proxy
-      entity_name: pedestrian_4_collision_proxy
-      pose: [7.20, -2.20, 0.960000, 0.0, 0.0, 2.356194]
+      pose: [0.0, 8.20, 0.960000, 0.0, 0.0, -1.570796]
       size: [0.95, 0.60, 1.72]
       is_static: false
 
@@ -52,50 +37,11 @@ pedestrians:
   - name: pedestrian_1
     entity_name: pedestrian_1
     collision_entity_name: pedestrian_1_collision_proxy
-    pose: [-5.50, 7.00, 0.474502, 0.0, 0.0, -0.785398]
-    linear_speed: 0.28
+    pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
+    linear_speed: 0.32
     start_delay_sec: 0.0
     waypoints:
-      - [-3.50, 6.00]
-      - [0.00, 5.20]
-      - [3.80, 4.60]
-      - [7.00, 4.10]
-  - name: pedestrian_2
-    entity_name: pedestrian_2
-    collision_entity_name: pedestrian_2_collision_proxy
-    pose: [5.50, 6.20, 0.474502, 0.0, 0.0, -2.356194]
-    linear_speed: 0.34
-    start_delay_sec: 8.5
-    waypoints:
-      - [5.00, 4.80]
-      - [4.60, 3.50]
-      - [3.80, 2.60]
-      - [0.20, 2.50]
-      - [-3.80, 2.40]
-      - [-6.50, 2.30]
-  - name: pedestrian_3
-    entity_name: pedestrian_3
-    collision_entity_name: pedestrian_3_collision_proxy
-    pose: [-7.20, -1.20, 0.474502, 0.0, 0.0, 0.643501]
-    linear_speed: 0.24
-    start_delay_sec: 2.0
-    waypoints:
-      - [-6.20, -0.20]
-      - [-6.30, 2.20]
-      - [-6.10, 5.20]
-      - [-5.60, 8.20]
-  - name: pedestrian_4
-    entity_name: pedestrian_4
-    collision_entity_name: pedestrian_4_collision_proxy
-    pose: [7.20, -2.20, 0.474502, 0.0, 0.0, 2.356194]
-    linear_speed: 0.44
-    start_delay_sec: 0.8
-    waypoints:
-      - [5.80, -1.50]
-      - [3.00, -1.30]
-      - [0.00, -1.20]
-      - [-3.20, -1.10]
-      - [-6.20, -1.00]
+      - [0.0, -9.0]
 
 goal:
   pose: [0.0, 9.0, 0.0, 0.0, 0.0, 1.570796]

@@ -169,6 +169,7 @@ class SceneStatePublisher(Node):
         self._last_actor_pose_samples: dict[str, tuple[float, float, float, float]] = {}
         self._last_actor_motion_times: dict[str, float] = {}
         self._selected_priority_human_id: str | None = None
+        self._use_priority_human_selector = len(self._priority_human_candidates) > 1
         self._pose_lock = threading.Lock()
         self._stats_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -940,7 +941,7 @@ class SceneStatePublisher(Node):
             self._robot_publisher.publish(robot_msg)
 
         selected_human: tuple[ActorConfig, tuple[float, float, float], float | None] | None = None
-        if self._priority_human_candidates:
+        if self._use_priority_human_selector and self._priority_human_candidates:
             selected_human = self._select_priority_human(robot_pose)
         elif (fallback_human_pose := self._resolve_actor_pose(self._human_config))[0] is not None:
             selected_human = (self._human_config, fallback_human_pose[0], fallback_human_pose[1])

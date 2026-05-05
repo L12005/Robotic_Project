@@ -18,18 +18,6 @@ def generate_launch_description():
         '/model/pedestrian_1/right_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
         '/model/pedestrian_1/left_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
         '/model/pedestrian_1/right_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_2/left_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_2/right_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_2/left_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_2/right_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_3/left_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_3/right_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_3/left_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_3/right_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_4/left_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_4/right_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_4/left_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
-        '/model/pedestrian_4/right_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
     ]
 
     return LaunchDescription([
