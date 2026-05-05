@@ -50,6 +50,11 @@ def generate_launch_description():
             package='hmi_scene',
             executable='human_motion_controller',
             name='human_motion_controller',
+            parameters=[
+                {
+                    'start_delay_sec': 5.0,
+                }
+            ],
             output='screen',
         ),
         Node(
