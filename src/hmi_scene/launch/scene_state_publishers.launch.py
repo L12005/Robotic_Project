@@ -52,7 +52,7 @@ def generate_launch_description():
             name='human_motion_controller',
             parameters=[
                 {
-                    'start_delay_sec': 5.0,
+                    'start_delay_sec': 6.5,
                 }
             ],
             output='screen',
