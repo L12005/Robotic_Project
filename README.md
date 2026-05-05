@@ -9,7 +9,7 @@
 - Gazebo Harmonic
 
 Notes:
-
+- Please select branch -version1
 - Do not install `gazebo` or `gazebo11`
 - `gazebo` refers to Gazebo Classic, not Gazebo Harmonic
 
