@@ -380,6 +380,7 @@ cd ~/your_ws
 source /opt/ros/jazzy/setup.bash
 colcon build
 source install/setup.bash
+ros2 launch hmi_test experiment_logger.launch.py
 ros2 launch hmi_scene open_area_scene.launch
 ```
 
@@ -390,5 +391,6 @@ cd ~/your_ws
 source /opt/ros/jazzy/setup.bash
 colcon build
 source install/setup.bash
+ros2 launch hmi_test experiment_logger.launch.py
 ros2 launch hmi_scene scene_state_publishers.launch
 ```
