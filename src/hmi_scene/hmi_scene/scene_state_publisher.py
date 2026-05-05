@@ -61,6 +61,12 @@ class BoxConfig:
     inflate_radius: float
 
 
+@dataclass(frozen=True)
+class PriorityHumanConfig:
+    actor: ActorConfig
+    start_delay_sec: float
+
+
 class SceneStatePublisher(Node):
     def __init__(self) -> None:
         super().__init__('scene_state_publisher')
@@ -130,6 +136,7 @@ class SceneStatePublisher(Node):
         (
             self._robot_config,
             self._human_config,
+            self._priority_human_candidates,
             self._obstacle_configs,
             self._map_config,
             self._static_boxes,
@@ -161,6 +168,7 @@ class SceneStatePublisher(Node):
         self._latest_robot_odom_stamp: float | None = None
         self._last_actor_pose_samples: dict[str, tuple[float, float, float, float]] = {}
         self._last_actor_motion_times: dict[str, float] = {}
+        self._selected_priority_human_id: str | None = None
         self._pose_lock = threading.Lock()
         self._stats_lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -211,7 +219,15 @@ class SceneStatePublisher(Node):
     def _load_scene_config(
         self,
         scene_config_path: Path,
-    ) -> tuple[ActorConfig, ActorConfig, list[ObstacleConfig], MapConfig, list[BoxConfig], list[BoxConfig]]:
+    ) -> tuple[
+        ActorConfig,
+        ActorConfig,
+        list[PriorityHumanConfig],
+        list[ObstacleConfig],
+        MapConfig,
+        list[BoxConfig],
+        list[BoxConfig],
+    ]:
         if not scene_config_path.is_file():
             raise FileNotFoundError(f'Scene config not found: {scene_config_path}')
 
@@ -221,9 +237,14 @@ class SceneStatePublisher(Node):
         models = data.get('models', {})
         robot = self._expect_mapping(models, 'robot')
         human = self._expect_mapping(models, 'human')
+        pedestrians = data.get('pedestrians', [])
         walls = models.get('walls', [])
         obstacles = models.get('obstacles', [])
         map_static_boxes = models.get('map_static_boxes', [])
+        if pedestrians is None:
+            pedestrians = []
+        if not isinstance(pedestrians, list):
+            raise ValueError('pedestrians must be a list in the scene config.')
         if not isinstance(walls, list):
             raise ValueError('models.walls must be a list in the scene config.')
         if not isinstance(obstacles, list):
@@ -259,6 +280,7 @@ class SceneStatePublisher(Node):
             pose_source_entity_name=str(human.get('entity_name', human.get('name', 'human_in_elevator'))),
             pose_source_offset=(0.0, 0.0, 0.0),
         )
+        priority_human_candidates = self._parse_priority_humans(pedestrians)
 
         map_config = self._parse_map_config(data.get('map', {}))
 
@@ -297,7 +319,40 @@ class SceneStatePublisher(Node):
             else:
                 dynamic_boxes.append(box)
 
-        return robot_config, human_config, obstacle_configs, map_config, static_boxes, dynamic_boxes
+        return (
+            robot_config,
+            human_config,
+            priority_human_candidates,
+            obstacle_configs,
+            map_config,
+            static_boxes,
+            dynamic_boxes,
+        )
+
+    def _parse_priority_humans(self, pedestrians: list[Any]) -> list[PriorityHumanConfig]:
+        candidates: list[PriorityHumanConfig] = []
+        for item in pedestrians:
+            if not isinstance(item, dict):
+                raise ValueError('Each pedestrian entry must be a mapping in the scene config.')
+            pose = item.get('pose', [])
+            if not isinstance(pose, list) or len(pose) < 6:
+                raise ValueError('Each pedestrian pose must contain [x, y, z, roll, pitch, yaw].')
+            actor = ActorConfig(
+                entity_name=str(item.get('entity_name', item.get('name', 'human'))),
+                actor_id=str(item.get('name', item.get('entity_name', 'human'))),
+                actor_type='human',
+                fallback_pose=self._parse_pose_entry(item),
+                fallback_linear_speed=float(item.get('linear_speed', 0.0)),
+                pose_source_entity_name=str(item.get('entity_name', item.get('name', 'human'))),
+                pose_source_offset=(0.0, 0.0, 0.0),
+            )
+            candidates.append(
+                PriorityHumanConfig(
+                    actor=actor,
+                    start_delay_sec=float(item.get('start_delay_sec', 0.0)),
+                )
+            )
+        return candidates
 
     def _parse_map_config(self, data: Any) -> MapConfig:
         if not isinstance(data, dict):
@@ -679,6 +734,82 @@ class SceneStatePublisher(Node):
         is_moving = linear_speed > 1e-3
         return linear_speed, 0.0, is_moving
 
+    def _select_priority_human(
+        self,
+        robot_pose: tuple[float, float, float] | None,
+    ) -> tuple[ActorConfig, tuple[float, float, float], float | None] | None:
+        if not self._priority_human_candidates:
+            return None
+
+        best_candidate: tuple[float, ActorConfig, tuple[float, float, float], float | None] | None = None
+        current_candidate: tuple[float, ActorConfig, tuple[float, float, float], float | None] | None = None
+
+        for candidate in self._priority_human_candidates:
+            pose, stamp = self._resolve_actor_pose(candidate.actor)
+            if pose is None:
+                continue
+            score = self._score_priority_human(robot_pose, pose)
+            payload = (score, candidate.actor, pose, stamp)
+            if candidate.actor.actor_id == self._selected_priority_human_id:
+                current_candidate = payload
+            if best_candidate is None or score > best_candidate[0]:
+                best_candidate = payload
+
+        if best_candidate is None:
+            return None
+
+        selected = best_candidate
+        if current_candidate is not None and current_candidate[0] >= best_candidate[0] - 0.75:
+            selected = current_candidate
+
+        self._selected_priority_human_id = selected[1].actor_id
+        return selected[1], selected[2], selected[3]
+
+    def _score_priority_human(
+        self,
+        robot_pose: tuple[float, float, float] | None,
+        human_pose: tuple[float, float, float],
+    ) -> float:
+        if robot_pose is None:
+            return 0.0
+
+        dx = human_pose[0] - robot_pose[0]
+        dy = human_pose[1] - robot_pose[1]
+        distance = math.hypot(dx, dy)
+        if distance > 12.0:
+            return -distance
+
+        local_x, local_y = self._transform_world_to_local_pose(robot_pose, human_pose[0], human_pose[1])
+        score = -distance
+        if local_x >= -0.5:
+            score += 3.0
+        if local_x >= 0.0:
+            score += 2.0
+        if abs(local_y) <= 0.9:
+            score += 2.5
+        elif abs(local_y) <= 1.8:
+            score += 1.0
+        if 0.0 <= local_x <= 4.0:
+            score += 1.5
+        elif -1.0 <= local_x < 0.0:
+            score += 0.5
+        return score
+
+    def _transform_world_to_local_pose(
+        self,
+        robot_pose: tuple[float, float, float],
+        x: float,
+        y: float,
+    ) -> tuple[float, float]:
+        dx = x - robot_pose[0]
+        dy = y - robot_pose[1]
+        cos_yaw = math.cos(robot_pose[2])
+        sin_yaw = math.sin(robot_pose[2])
+        return (
+            cos_yaw * dx + sin_yaw * dy,
+            -sin_yaw * dx + cos_yaw * dy,
+        )
+
     def _build_static_map_data(self) -> list[int]:
         grid = [0] * (self._map_config.width * self._map_config.height)
         for box in self._static_boxes:
@@ -808,19 +939,25 @@ class SceneStatePublisher(Node):
             robot_msg.is_moving = bool(robot_is_moving)
             self._robot_publisher.publish(robot_msg)
 
-        human_pose, human_stamp = self._resolve_actor_pose(self._human_config)
-        if human_pose is not None:
+        selected_human: tuple[ActorConfig, tuple[float, float, float], float | None] | None = None
+        if self._priority_human_candidates:
+            selected_human = self._select_priority_human(robot_pose)
+        elif (fallback_human_pose := self._resolve_actor_pose(self._human_config))[0] is not None:
+            selected_human = (self._human_config, fallback_human_pose[0], fallback_human_pose[1])
+
+        if selected_human is not None:
+            human_actor, human_pose, human_stamp = selected_human
             human_linear_x, human_angular_z, human_is_moving = self._estimate_actor_motion(
-                self._human_config.actor_id,
+                human_actor.actor_id,
                 human_pose,
                 human_stamp,
-                self._human_config.fallback_linear_speed,
+                human_actor.fallback_linear_speed,
             )
             human_msg = ActorState()
             human_msg.header.stamp = now
             human_msg.header.frame_id = self._frame_id
-            human_msg.actor_id = self._human_config.actor_id
-            human_msg.actor_type = self._human_config.actor_type
+            human_msg.actor_id = human_actor.actor_id
+            human_msg.actor_type = human_actor.actor_type
             human_msg.x = human_pose[0]
             human_msg.y = human_pose[1]
             human_msg.yaw = human_pose[2]

@@ -109,7 +109,6 @@ def generate_launch_description():
             parameters=[
                 {
                     'control_rate_hz': 20.0,
-                    'human_state_topic': '/hmi/scene/open_area_unused_human_state',
                 }
             ],
             output='screen',
