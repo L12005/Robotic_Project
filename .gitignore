@@ -6,3 +6,6 @@ env.sh
 __pycache__/
 *.pyc
 *.pyo
+report/
+experiment_log/*
+!experiment_log/.gitkeep

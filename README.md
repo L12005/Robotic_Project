@@ -362,13 +362,13 @@ Run the required launch file after sourcing the workspace.
 Scene 1: Elevator Area
 
 ```bash
-ros2 launch hmi_scene open_area_scene.launch
+ros2 launch hmi_scene scene_state_publishers.launch
 ```
 
 Scene 2: Open Field
 
 ```bash
-ros2 launch hmi_scene scene_state_publishers.launch
+ros2 launch hmi_scene open_area_scene.launch
 ```
 
 ### 12.5 Recommended Launch Workflow

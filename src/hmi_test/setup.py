@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import find_packages, setup
 
 
@@ -11,7 +12,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', ['launch/scene_topic_monitors.launch.py']),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -27,6 +28,7 @@ setup(
             'obstacle_state_monitor = hmi_test.obstacle_state_monitor:main',
             'map_state_monitor = hmi_test.map_state_monitor:main',
             'map_grid_dump = hmi_test.map_grid_dump:main',
+            'experiment_logger = hmi_test.experiment_logger:main',
         ],
     },
 )
