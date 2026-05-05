@@ -304,3 +304,91 @@ Expected:
 - ROS 2 Jazzy is available
 - Gazebo Harmonic is available
 - Gazebo launches correctly
+
+---
+
+## 12. Build the Workspace and Launch Simulation
+
+After the environment is ready, use the following workflow to build the ROS 2 workspace and launch the simulation scenes.
+
+### 12.1 Install `colcon`
+
+If `colcon` is not installed yet, run:
+
+```bash
+sudo apt update
+sudo apt install -y python3-colcon-common-extensions
+```
+
+Verify:
+
+```bash
+colcon --help
+```
+
+### 12.2 Build the Workspace
+
+Go to your ROS 2 workspace root directory:
+
+```bash
+cd ~/your_ws
+```
+
+Build the packages:
+
+```bash
+colcon build
+```
+
+### 12.3 Source the Workspace
+
+After building, refresh the environment:
+
+```bash
+source install/setup.bash
+```
+
+If needed, run the ROS global setup first:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+```
+
+### 12.4 Launch the Simulation Scenes
+
+Run the required launch file after sourcing the workspace.
+
+Scene 1: Elevator Area
+
+```bash
+ros2 launch hmi_scene open_area_scene.launch
+```
+
+Scene 2: Open Field
+
+```bash
+ros2 launch hmi_scene scene_state_publishers.launch
+```
+
+### 12.5 Recommended Launch Workflow
+
+Use the following order each time:
+
+```bash
+cd ~/your_ws
+source /opt/ros/jazzy/setup.bash
+colcon build
+source install/setup.bash
+ros2 launch hmi_scene open_area_scene.launch
+```
+
+or
+
+```bash
+cd ~/your_ws
+source /opt/ros/jazzy/setup.bash
+colcon build
+source install/setup.bash
+ros2 launch hmi_scene scene_state_publishers.launch
+```
