@@ -55,6 +55,15 @@ class ActorForwardTestController(Node):
                 ParameterDescriptor(description='Gazebo collision proxy entity that should stay aligned with the visible human.'),
             ).value
         )
+        self._joint_topic_prefix = str(
+            self.declare_parameter(
+                'joint_topic_prefix',
+                '/human_in_elevator',
+                ParameterDescriptor(
+                    description='ROS topic prefix used for the arm / leg joint command topics.'
+                ),
+            ).value
+        ).rstrip('/')
         self._linear_speed = float(
             self.declare_parameter(
                 'linear_speed',
@@ -137,10 +146,18 @@ class ActorForwardTestController(Node):
         self._set_pose_service = f'/world/{self._world_name}/set_pose'
         self._stats_topic = f'/world/{self._world_name}/stats'
         self._set_pose_client = self.create_client(SetEntityPose, self._set_pose_service)
-        self._left_arm_publisher = self.create_publisher(Float64, '/human_in_elevator/left_arm_joint_cmd', 10)
-        self._right_arm_publisher = self.create_publisher(Float64, '/human_in_elevator/right_arm_joint_cmd', 10)
-        self._left_leg_publisher = self.create_publisher(Float64, '/human_in_elevator/left_leg_joint_cmd', 10)
-        self._right_leg_publisher = self.create_publisher(Float64, '/human_in_elevator/right_leg_joint_cmd', 10)
+        self._left_arm_publisher = self.create_publisher(
+            Float64, f'{self._joint_topic_prefix}/left_arm_joint_cmd', 10
+        )
+        self._right_arm_publisher = self.create_publisher(
+            Float64, f'{self._joint_topic_prefix}/right_arm_joint_cmd', 10
+        )
+        self._left_leg_publisher = self.create_publisher(
+            Float64, f'{self._joint_topic_prefix}/left_leg_joint_cmd', 10
+        )
+        self._right_leg_publisher = self.create_publisher(
+            Float64, f'{self._joint_topic_prefix}/right_leg_joint_cmd', 10
+        )
         self._pending_pose_futures: list[Any] = []
         self._warned_service_unavailable = False
         self._stats_lock = threading.Lock()
@@ -164,7 +181,7 @@ class ActorForwardTestController(Node):
         self.get_logger().info(
             'Human motion controller is ready. '
             f'Initial visual entity: {self._visual_entity_name}, collision entity: {self._collision_entity_name}, '
-            f'speed: {self._linear_speed:.2f} m/s, '
+            f'joint topic prefix: {self._joint_topic_prefix}, speed: {self._linear_speed:.2f} m/s, '
             f'waypoints: {len(self._waypoints)}.'
         )
 

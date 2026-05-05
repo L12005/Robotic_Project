@@ -52,13 +52,20 @@ def generate_launch_description():
         ),
         Node(
             package='hmi_scene',
-            executable='open_area_pedestrian_controller',
-            name='open_area_pedestrian_controller',
+            executable='human_motion_controller',
+            name='human_motion_controller',
             parameters=[
                 {
                     'scene_config_path': str(scene_config),
                     'world_name': 'open_area',
-                    'update_rate_hz': 30.0,
+                    'visual_entity_name': 'pedestrian_1',
+                    'collision_entity_name': 'pedestrian_1_collision_proxy',
+                    'joint_topic_prefix': '/model/pedestrian_1',
+                    'linear_speed': 0.32,
+                    'update_rate_hz': 60.0,
+                    'stride_length': 0.62,
+                    'arm_swing_amplitude_rad': 0.72,
+                    'leg_swing_amplitude_rad': 0.48,
                 }
             ],
             output='screen',
