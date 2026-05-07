@@ -1,0 +1,25 @@
+scene_name: human_xboxcontrol
+description: >
+  Minimal Xbox joystick test scene with a single manually controlled human,
+  one collision proxy, and a flat 20x20 floor.
+
+map:
+  resolution: 0.05
+  origin: [-10.0, -10.0]
+  width: 400
+  height: 400
+  static_inflation_radius: 0.0
+  human_inflation_radius: 0.0
+
+models:
+  human:
+    name: human_xbox
+    entity_name: human_xbox
+    pose: [0.0, -9.0, 0.474502, 0.0, 0.0, 1.570796]
+    linear_speed: 0.45
+  obstacles:
+    - name: human_xbox_collision_proxy
+      entity_name: human_xbox_collision_proxy
+      pose: [0.0, -9.0, 0.960000, 0.0, 0.0, 1.570796]
+      size: [0.95, 0.60, 1.72]
+      is_static: false
