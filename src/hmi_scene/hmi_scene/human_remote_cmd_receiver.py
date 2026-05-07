@@ -57,6 +57,15 @@ class HumanRemoteCmdReceiver(Node):
                 ParameterDescriptor(description='Minimum stick magnitude required to trigger walking.'),
             ).value
         )
+        self._input_rotation_rad = float(
+            self.declare_parameter(
+                'input_rotation_rad',
+                0.0,
+                ParameterDescriptor(
+                    description='Optional rotation applied to the incoming stick direction before mapping to world x/y.'
+                ),
+            ).value
+        )
 
         self._publisher = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.create_timer(1.0 / max(self._publish_rate_hz, 1.0), self._publish_latest_command)
@@ -137,10 +146,18 @@ class HumanRemoteCmdReceiver(Node):
             stop_pressed = self._stop_pressed
 
         twist = Twist()
-        magnitude = math.hypot(left_x, left_y)
+        rotated_x = left_x
+        rotated_y = left_y
+        if abs(self._input_rotation_rad) > 1e-9:
+            cos_yaw = math.cos(self._input_rotation_rad)
+            sin_yaw = math.sin(self._input_rotation_rad)
+            rotated_x = left_x * cos_yaw - left_y * sin_yaw
+            rotated_y = left_x * sin_yaw + left_y * cos_yaw
+
+        magnitude = math.hypot(rotated_x, rotated_y)
         if not stop_pressed and magnitude >= self._deadzone:
-            direction_x = left_x / max(magnitude, 1e-6)
-            direction_y = left_y / max(magnitude, 1e-6)
+            direction_x = rotated_x / max(magnitude, 1e-6)
+            direction_y = rotated_y / max(magnitude, 1e-6)
             twist.linear.x = direction_x * self._fixed_speed
             twist.linear.y = direction_y * self._fixed_speed
 

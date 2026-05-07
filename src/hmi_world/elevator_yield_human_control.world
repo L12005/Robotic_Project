@@ -1,0 +1,355 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <world name="elevator_yield_human_control">
+    <physics type="ode">
+      <max_step_size>0.015625</max_step_size>
+      <real_time_update_rate>64</real_time_update_rate>
+    </physics>
+
+    <gravity>0 0 -9.8</gravity>
+
+    <scene>
+      <ambient>0.80 0.80 0.80 1</ambient>
+      <background>0.95 0.96 0.97 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.25 0.10 -0.95</direction>
+    </light>
+
+    <model name="scene_floor">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>0 -5 -0.03 0 0 0</pose>
+          <geometry><box><size>10 20 0.06</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>0 -5 -0.03 0 0 0</pose>
+          <geometry><box><size>10 20 0.06</size></box></geometry>
+          <material>
+            <ambient>0.88 0.88 0.86 1</ambient>
+            <diffuse>0.93 0.93 0.90 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <include>
+      <uri>model://turtlebot3_burger_ir</uri>
+      <name>turtlebot3_burger_ir</name>
+      <pose>0.00 -4.85 0.012 0 0 1.570796</pose>
+    </include>
+
+    <model name="elevator_car">
+      <include>
+        <uri>model://aws_robomaker_hospital_elevator_01_car</uri>
+        <pose>0 1.65 0.19 0 0 0</pose>
+      </include>
+    </model>
+
+    <model name="elevator_portal">
+      <include>
+        <uri>model://aws_robomaker_hospital_elevator_01_portal</uri>
+        <pose>0 1.78 0.19 0 0 0</pose>
+      </include>
+    </model>
+
+    <model name="left_door_side_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>-1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>-1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="right_door_side_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="human_in_elevator">
+      <static>false</static>
+      <pose>0.000004 3.219430 0.474502 0 0 -1.556373</pose>
+      <link name="torso_link">
+        <gravity>false</gravity>
+        <pose>0 0 0.56 0 0 0</pose>
+        <inertial>
+          <mass>8.0</mass>
+          <inertia>
+            <ixx>0.25</ixx>
+            <iyy>0.20</iyy>
+            <izz>0.18</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="torso_visual">
+          <geometry><box><size>0.34 0.22 0.62</size></box></geometry>
+          <material><ambient>0.18 0.44 0.74 1</ambient><diffuse>0.24 0.52 0.80 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="head_link">
+        <gravity>false</gravity>
+        <pose>0 0 1.07 0 0 0</pose>
+        <inertial>
+          <mass>1.5</mass>
+          <inertia>
+            <ixx>0.02</ixx>
+            <iyy>0.02</iyy>
+            <izz>0.02</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="head_visual">
+          <geometry><sphere><radius>0.11</radius></sphere></geometry>
+          <material><ambient>0.86 0.73 0.63 1</ambient><diffuse>0.90 0.78 0.68 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="left_leg_link">
+        <gravity>false</gravity>
+        <pose>0.00 0.06 0.29 0 0 0</pose>
+        <inertial>
+          <mass>2.0</mass>
+          <inertia>
+            <ixx>0.10</ixx>
+            <iyy>0.03</iyy>
+            <izz>0.10</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="left_leg_visual">
+          <pose>0 0 -0.38 0 0 0</pose>
+          <geometry><cylinder><radius>0.055</radius><length>0.76</length></cylinder></geometry>
+          <material><ambient>0.14 0.16 0.20 1</ambient><diffuse>0.18 0.20 0.26 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="right_leg_link">
+        <gravity>false</gravity>
+        <pose>0.00 -0.06 0.29 0 0 0</pose>
+        <inertial>
+          <mass>2.0</mass>
+          <inertia>
+            <ixx>0.10</ixx>
+            <iyy>0.03</iyy>
+            <izz>0.10</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="right_leg_visual">
+          <pose>0 0 -0.38 0 0 0</pose>
+          <geometry><cylinder><radius>0.055</radius><length>0.76</length></cylinder></geometry>
+          <material><ambient>0.14 0.16 0.20 1</ambient><diffuse>0.18 0.20 0.26 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="left_arm_link">
+        <gravity>false</gravity>
+        <pose>0.00 0.15 0.85 0 0 0</pose>
+        <inertial>
+          <mass>1.2</mass>
+          <inertia>
+            <ixx>0.04</ixx>
+            <iyy>0.015</iyy>
+            <izz>0.04</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="left_arm_visual">
+          <pose>0 0 -0.28 0 0 0</pose>
+          <geometry><cylinder><radius>0.04</radius><length>0.56</length></cylinder></geometry>
+          <material><ambient>0.86 0.73 0.63 1</ambient><diffuse>0.90 0.78 0.68 1</diffuse></material>
+        </visual>
+      </link>
+      <link name="right_arm_link">
+        <gravity>false</gravity>
+        <pose>0.00 -0.15 0.85 0 0 0</pose>
+        <inertial>
+          <mass>1.2</mass>
+          <inertia>
+            <ixx>0.04</ixx>
+            <iyy>0.015</iyy>
+            <izz>0.04</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="right_arm_visual">
+          <pose>0 0 -0.28 0 0 0</pose>
+          <geometry><cylinder><radius>0.04</radius><length>0.56</length></cylinder></geometry>
+          <material><ambient>0.86 0.73 0.63 1</ambient><diffuse>0.90 0.78 0.68 1</diffuse></material>
+        </visual>
+      </link>
+      <joint name="head_joint" type="fixed">
+        <parent>torso_link</parent>
+        <child>head_link</child>
+      </joint>
+      <joint name="left_leg_joint" type="revolute">
+        <parent>torso_link</parent>
+        <child>left_leg_link</child>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-0.50</lower><upper>0.50</upper></limit>
+          <dynamics><damping>1.0</damping></dynamics>
+        </axis>
+      </joint>
+      <joint name="right_leg_joint" type="revolute">
+        <parent>torso_link</parent>
+        <child>right_leg_link</child>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-0.50</lower><upper>0.50</upper></limit>
+          <dynamics><damping>1.0</damping></dynamics>
+        </axis>
+      </joint>
+      <joint name="left_arm_joint" type="revolute">
+        <parent>torso_link</parent>
+        <child>left_arm_link</child>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-0.90</lower><upper>0.90</upper></limit>
+          <dynamics><damping>0.8</damping></dynamics>
+        </axis>
+      </joint>
+      <joint name="right_arm_joint" type="revolute">
+        <parent>torso_link</parent>
+        <child>right_arm_link</child>
+        <axis>
+          <xyz>0 1 0</xyz>
+          <limit><lower>-0.90</lower><upper>0.90</upper></limit>
+          <dynamics><damping>0.8</damping></dynamics>
+        </axis>
+      </joint>
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+        <joint_name>left_arm_joint</joint_name>
+        <topic>/human_in_elevator/left_arm_joint_cmd</topic>
+        <p_gain>12</p_gain>
+        <d_gain>0.8</d_gain>
+        <cmd_max>20</cmd_max>
+        <cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+        <joint_name>right_arm_joint</joint_name>
+        <topic>/human_in_elevator/right_arm_joint_cmd</topic>
+        <p_gain>12</p_gain>
+        <d_gain>0.8</d_gain>
+        <cmd_max>20</cmd_max>
+        <cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+        <joint_name>left_leg_joint</joint_name>
+        <topic>/human_in_elevator/left_leg_joint_cmd</topic>
+        <p_gain>14</p_gain>
+        <d_gain>1.0</d_gain>
+        <cmd_max>20</cmd_max>
+        <cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
+        <joint_name>right_leg_joint</joint_name>
+        <topic>/human_in_elevator/right_leg_joint_cmd</topic>
+        <p_gain>14</p_gain>
+        <d_gain>1.0</d_gain>
+        <cmd_max>20</cmd_max>
+        <cmd_min>-20</cmd_min>
+      </plugin>
+    </model>
+
+    <model name="human_collision_proxy">
+      <static>false</static>
+      <pose>0.000004 3.219430 0.960000 0 0 -1.556373</pose>
+      <link name="collision_link">
+        <gravity>false</gravity>
+        <collision name="body_collision">
+          <geometry><box><size>0.95 0.60 1.72</size></box></geometry>
+        </collision>
+        <visual name="debug_visual">
+          <geometry><box><size>0.95 0.60 1.72</size></box></geometry>
+          <material><ambient>0.2 0.8 0.2 0.35</ambient><diffuse>0.2 0.8 0.2 0.35</diffuse></material>
+          <transparency>0.65</transparency>
+        </visual>
+      </link>
+    </model>
+
+    <model name="left_corridor_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>-2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>-2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="right_corridor_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="rear_obstacle">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>1.77 -1.26 0.75 0 0 0</pose>
+          <geometry><box><size>1.10 0.55 1.50</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>1.77 -1.26 0.75 0 0 0</pose>
+          <geometry><box><size>1.10 0.55 1.50</size></box></geometry>
+          <material><ambient>0.65 0.67 0.70 1</ambient><diffuse>0.73 0.75 0.79 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
