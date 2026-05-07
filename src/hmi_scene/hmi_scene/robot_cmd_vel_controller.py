@@ -91,7 +91,13 @@ class RobotCmdVelController(Node):
         self._stats_reader_process: subprocess.Popen[str] | None = None
         self._stats_reader_thread = threading.Thread(target=self._run_stats_reader, daemon=True)
         self._stats_reader_thread.start()
+        self._command_lock = threading.Lock()
+        self._command_condition = threading.Condition(self._command_lock)
+        self._pending_command_pose: tuple[float, float, float, float] | None = None
+        self._active_command_pose: tuple[float, float, float, float] | None = None
         self._last_sent_command_pose: tuple[float, float, float, float] | None = None
+        self._command_worker_thread = threading.Thread(target=self._run_command_worker, daemon=True)
+        self._command_worker_thread.start()
         self._last_cmd_debug_log_sec = 0.0
         self._last_cmd_debug_signature: tuple[float, float] | None = None
         self._last_pose_sync_log_sec = 0.0
@@ -108,7 +114,8 @@ class RobotCmdVelController(Node):
         self._cmd_timeout_sec = max(cmd_timeout_sec, 0.0)
         self._use_robot_state_feedback = use_robot_state_feedback
 
-        self.create_subscription(Twist, cmd_vel_topic, self._on_cmd_vel, 20)
+        # Keep only the latest cmd_vel if the controller falls behind briefly.
+        self.create_subscription(Twist, cmd_vel_topic, self._on_cmd_vel, 1)
         if self._use_robot_state_feedback:
             self.create_subscription(ActorState, robot_state_topic, self._on_robot_state, 20)
         self.create_timer(1.0 / update_rate_hz, self._update_motion)
@@ -310,9 +317,9 @@ class RobotCmdVelController(Node):
             self._current_y = new_y
             self._current_yaw = new_yaw
 
-        self._set_entity_pose(new_x, new_y, self._fallback_z, new_yaw)
+        self._queue_entity_pose(new_x, new_y, self._fallback_z, new_yaw)
 
-    def _set_entity_pose(self, x: float, y: float, z: float, yaw: float) -> None:
+    def _queue_entity_pose(self, x: float, y: float, z: float, yaw: float) -> None:
         command_yaw = self._normalize_angle(yaw - self._command_offset_yaw)
         offset_world_x = (
             math.cos(command_yaw) * self._command_offset_x -
@@ -326,13 +333,40 @@ class RobotCmdVelController(Node):
         command_y = y - offset_world_y
 
         command_pose = (command_x, command_y, z, command_yaw)
-        if self._last_sent_command_pose is not None:
-            dx = command_pose[0] - self._last_sent_command_pose[0]
-            dy = command_pose[1] - self._last_sent_command_pose[1]
-            dyaw = self._normalize_angle(command_pose[3] - self._last_sent_command_pose[3])
-            if math.hypot(dx, dy) < 1e-4 and abs(dyaw) < 1e-4:
+        with self._command_condition:
+            if self._is_pose_change_small(command_pose, self._last_sent_command_pose):
+                return
+            if self._is_pose_change_small(command_pose, self._active_command_pose):
+                return
+            if self._is_pose_change_small(command_pose, self._pending_command_pose):
                 return
 
+            # Replace any stale pending pose so the worker always sends the newest state.
+            self._pending_command_pose = command_pose
+            self._command_condition.notify()
+
+    def _run_command_worker(self) -> None:
+        while True:
+            with self._command_condition:
+                while self._pending_command_pose is None and not self._stop_event.is_set():
+                    self._command_condition.wait(timeout=0.2)
+
+                if self._pending_command_pose is None and self._stop_event.is_set():
+                    return
+
+                command_pose = self._pending_command_pose
+                self._pending_command_pose = None
+                self._active_command_pose = command_pose
+
+            sent_successfully = self._send_entity_pose(command_pose)
+
+            with self._command_condition:
+                if sent_successfully:
+                    self._last_sent_command_pose = command_pose
+                self._active_command_pose = None
+
+    def _send_entity_pose(self, command_pose: tuple[float, float, float, float]) -> bool:
+        command_x, command_y, z, command_yaw = command_pose
         quaternion = self._quaternion_from_rpy(0.0, 0.0, command_yaw)
         request_text = (
             f'name: "{self._command_entity_name}" '
@@ -364,10 +398,10 @@ class RobotCmdVelController(Node):
             )
         except FileNotFoundError:
             self.get_logger().error('Could not find the `gz` executable needed to move the robot.')
-            return
+            return False
         except subprocess.TimeoutExpired:
             self.get_logger().warning('Timed out while sending a Gazebo set_pose request for the robot.')
-            return
+            return False
 
         if result.returncode != 0 or 'data: true' not in result.stdout:
             stderr_text = result.stderr.strip()
@@ -376,9 +410,21 @@ class RobotCmdVelController(Node):
                 'Robot set_pose request failed: '
                 f'code={result.returncode}, stdout="{stdout_text}", stderr="{stderr_text}"'
             )
-            return
+            return False
 
-        self._last_sent_command_pose = command_pose
+        return True
+
+    def _is_pose_change_small(
+        self,
+        command_pose: tuple[float, float, float, float],
+        reference_pose: tuple[float, float, float, float] | None,
+    ) -> bool:
+        if reference_pose is None:
+            return False
+        dx = command_pose[0] - reference_pose[0]
+        dy = command_pose[1] - reference_pose[1]
+        dyaw = self._normalize_angle(command_pose[3] - reference_pose[3])
+        return math.hypot(dx, dy) < 1e-4 and abs(dyaw) < 1e-4
 
     def _quaternion_from_rpy(self, roll: float, pitch: float, yaw: float) -> tuple[float, float, float, float]:
         half_roll = roll * 0.5
@@ -414,8 +460,12 @@ class RobotCmdVelController(Node):
 
     def destroy_node(self) -> bool:
         self._stop_event.set()
+        with self._command_condition:
+            self._command_condition.notify_all()
         if self._stats_reader_process is not None:
             self._stop_process(self._stats_reader_process)
+        if self._command_worker_thread.is_alive():
+            self._command_worker_thread.join(timeout=2.0)
         if self._stats_reader_thread.is_alive():
             self._stats_reader_thread.join(timeout=2.0)
         return super().destroy_node()

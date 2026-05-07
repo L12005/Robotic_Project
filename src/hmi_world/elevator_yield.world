@@ -1,6 +1,13 @@
 <?xml version="1.0" ?>
 <sdf version="1.7">
   <world name="elevator_yield">
+
+    // New added comment for testing
+    <physics type="ode">
+      <max_step_size>0.015625</max_step_size>
+      <real_time_update_rate>64</real_time_update_rate>
+    </physics>
+
     <gravity>0 0 -9.8</gravity>
 
     <scene>
