@@ -17,7 +17,7 @@ from hmi_behavior.grid_planner import (
     paint_oriented_box,
     plan_a_star,
 )
-from hmi_behavior.open_area_policy import plan_yield_goal as plan_open_area_yield_goal
+from hmi_behavior.open_area_policy import generate_open_area_candidates
 from hmi_behavior.robot_state import (
     AggregatedState,
     MotionTarget,
@@ -316,21 +316,12 @@ class BehaviorStateMachine:
         return None
 
     def _generate_open_area_candidates(self, context: AggregatedState) -> list[MotionTarget]:
-        seed = plan_open_area_yield_goal(
-            context,
-            reverse_distance=self._config.reverse_distance_open_area,
-            lateral_offset=self._config.lateral_offset_open_area,
-            side_probe_distance=self._config.side_probe_distance,
-        )
-        candidates = generate_elevator_candidates(
+        return generate_open_area_candidates(
             context,
             reverse_distance=self._config.reverse_distance_open_area,
             lateral_offset=self._config.lateral_offset_open_area,
             sample_count=max(self._config.yield_sample_count, 12),
         )
-        if seed is not None:
-            candidates = [seed] + [candidate for candidate in candidates if distance_xy(candidate.x, candidate.y, seed.x, seed.y) > 0.05]
-        return candidates
 
     def _human_is_relevant(self, context: AggregatedState) -> bool:
         if context.robot is None or context.human is None:
@@ -379,6 +370,8 @@ class BehaviorStateMachine:
             linear_x = -min(self._config.max_reverse_speed, self._config.linear_gain * distance)
             if abs(heading_error) > self._config.heading_slow_threshold:
                 linear_x *= 0.5
+            if self._reverse_would_approach_human(context):
+                linear_x = 0.0
             return linear_x, angular_z
 
         heading_error = normalize_angle(math.atan2(local_y, max(local_x, 1e-6)))
@@ -392,6 +385,16 @@ class BehaviorStateMachine:
         elif abs(heading_error) > self._config.heading_slow_threshold:
             linear_x *= 0.4
         return linear_x, angular_z
+
+    def _reverse_would_approach_human(self, context: AggregatedState) -> bool:
+        if context.robot is None or context.human is None:
+            return False
+
+        reverse_x = -math.cos(context.robot.yaw)
+        reverse_y = -math.sin(context.robot.yaw)
+        human_x = context.human.x - context.robot.x
+        human_y = context.human.y - context.robot.y
+        return reverse_x * human_x + reverse_y * human_y > 0.0
 
     def _output(
         self,
