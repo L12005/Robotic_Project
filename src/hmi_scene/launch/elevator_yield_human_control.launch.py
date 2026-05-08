@@ -95,7 +95,7 @@ def generate_launch_description():
                     'scene_config_path': str(scene_config),
                     'world_name': 'elevator_yield_human_control',
                     'use_robot_state_feedback': False,
-                    'update_rate_hz': 50.0,
+                    'update_rate_hz': 128.0,
                 }
             ],
             output='screen',

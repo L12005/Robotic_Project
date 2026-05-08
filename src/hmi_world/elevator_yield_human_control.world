@@ -2,8 +2,8 @@
 <sdf version="1.7">
   <world name="elevator_yield_human_control">
     <physics type="ode">
-      <max_step_size>0.015625</max_step_size>
-      <real_time_update_rate>64</real_time_update_rate>
+      <max_step_size>0.0078125</max_step_size>
+      <real_time_update_rate>128</real_time_update_rate>
     </physics>
 
     <gravity>0 0 -9.8</gravity>
