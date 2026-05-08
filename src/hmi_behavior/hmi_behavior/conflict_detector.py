@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from hmi_behavior.robot_state import AggregatedState, transform_world_to_local
+from hmi_behavior.robot_state import AggregatedState, effective_human_zone_speed, transform_world_to_local
 
 
 @dataclass
@@ -32,7 +32,7 @@ def assess_conflict(
         )
 
     distance_to_human = math.hypot(context.robot.x - context.human.x, context.robot.y - context.human.y)
-    human_speed = max(abs(context.human.linear_x), 0.1 if context.human.is_moving else 0.0)
+    human_speed = effective_human_zone_speed(context.human)
     conflict_depth = human_speed * human_zone_time
     exit_depth = human_speed * human_exit_time
 

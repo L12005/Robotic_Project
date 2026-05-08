@@ -13,6 +13,7 @@ def _actor(x: float, y: float, yaw: float, moving: bool = False) -> ActorSnapsho
         y=y,
         yaw=yaw,
         linear_x=0.5 if moving else 0.0,
+        nominal_linear_x=0.5,
         angular_z=0.0,
         is_moving=moving,
         stamp_sec=0.0,

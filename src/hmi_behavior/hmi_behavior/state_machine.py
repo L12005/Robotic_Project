@@ -22,6 +22,7 @@ from hmi_behavior.robot_state import (
     AggregatedState,
     MotionTarget,
     distance_xy,
+    effective_human_zone_speed,
     normalize_angle,
     select_base_map,
     target_distance,
@@ -315,7 +316,8 @@ class BehaviorStateMachine:
 
             # Planning blocks the human body plus the forward no-go zone;
             # exit_zone only gates resume.
-            forward_zone_depth = abs(context.human.linear_x) * self._config.human_zone_time
+            forward_zone_speed = effective_human_zone_speed(context.human)
+            forward_zone_depth = forward_zone_speed * self._config.human_zone_time
             if context.human.is_moving:
                 forward_zone_depth = max(forward_zone_depth, self._config.human_forward_min_depth)
 
