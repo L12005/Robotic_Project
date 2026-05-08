@@ -18,7 +18,7 @@ models:
     entity_name: turtlebot3_burger_ir
     command_entity_name: turtlebot3_burger_ir
     command_offset: [0.0, 0.0, 0.0]
-    pose: [0.00, -4.85, 0.012, 0.0, 0.0, 1.570796]
+    pose: [0.00, -3.00, 0.012, 0.0, 0.0, 1.570796]
   human:
     name: human_in_elevator
     entity_name: human_in_elevator

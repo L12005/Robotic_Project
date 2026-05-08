@@ -160,7 +160,18 @@ class BehaviorStateMachine:
             if self._state != InternalState.HARD_STOP:
                 self._state = InternalState.HARD_STOP
                 self._hard_stop_started_at = now_sec
+            self._wait_started_at = None
             self._active_target = None
+            return self._output(scene_label, conflict.reason or "human_close", 0.0, 0.0, None, now_sec)
+
+        # --- Wait interrupted by entering the forward no-go zone ---
+        if (
+            self._state == InternalState.WAIT
+            and self._wait_started_at is not None
+            and conflict.conflict
+        ):
+            self._state = InternalState.CONFLICT_AVOIDING_NAVIGATE
+            self._wait_started_at = None
             return self._output(scene_label, conflict.reason or "human_close", 0.0, 0.0, None, now_sec)
 
         # --- Wait exit: 1s elapsed (no hard_stop check, it is a separate state now) ---
@@ -175,6 +186,7 @@ class BehaviorStateMachine:
             self._active_target = None
             self._resume_until = 0.0
             self._avoidance_session_active = False
+            self._wait_started_at = None
             return self._output(scene_label, "", 0.0, 0.0, None, now_sec)
 
         # --- ConflictAvoid arrival: re-evaluate ---
@@ -314,25 +326,32 @@ class BehaviorStateMachine:
                 radius=self._config.human_body_radius,
             )
 
-            # Planning blocks the human body plus the forward no-go zone;
-            # exit_zone only gates resume.
-            forward_zone_speed = effective_human_zone_speed(context.human)
-            forward_zone_depth = forward_zone_speed * self._config.human_zone_time
-            if context.human.is_moving:
-                forward_zone_depth = max(forward_zone_depth, self._config.human_forward_min_depth)
+            # Keep the human body blocked at all times, but once we are actively
+            # trying to retreat we allow planning through the forward zone so
+            # the robot can escape even if it was passively swallowed by it.
+            planning_blocks_forward_zone = self._state not in (
+                InternalState.CONFLICT_AVOIDING_NAVIGATE,
+                InternalState.CONFLICT_AVOID,
+            )
+            if planning_blocks_forward_zone:
+                # exit_zone only gates resume; it is not painted separately.
+                forward_zone_speed = effective_human_zone_speed(context.human)
+                forward_zone_depth = forward_zone_speed * self._config.human_zone_time
+                if context.human.is_moving:
+                    forward_zone_depth = max(forward_zone_depth, self._config.human_forward_min_depth)
 
-            if forward_zone_depth > 0.0:
-                center_x = context.human.x + math.cos(context.human.yaw) * forward_zone_depth * 0.5
-                center_y = context.human.y + math.sin(context.human.yaw) * forward_zone_depth * 0.5
-                paint_oriented_box(
-                    data,
-                    spec,
-                    center_x=center_x,
-                    center_y=center_y,
-                    yaw=context.human.yaw,
-                    size_x=forward_zone_depth,
-                    size_y=self._config.human_zone_half_width * 2.0,
-                )
+                if forward_zone_depth > 0.0:
+                    center_x = context.human.x + math.cos(context.human.yaw) * forward_zone_depth * 0.5
+                    center_y = context.human.y + math.sin(context.human.yaw) * forward_zone_depth * 0.5
+                    paint_oriented_box(
+                        data,
+                        spec,
+                        center_x=center_x,
+                        center_y=center_y,
+                        yaw=context.human.yaw,
+                        size_x=forward_zone_depth,
+                        size_y=self._config.human_zone_half_width * 2.0,
+                    )
 
         planning_map = OccupancyGrid()
         planning_map.header = base_map.header
@@ -421,7 +440,7 @@ class BehaviorStateMachine:
             )
             linear_x = -min(self._config.max_reverse_speed, self._config.linear_gain * distance)
             if abs(heading_error) > self._config.heading_slow_threshold:
-                linear_x *= 0.5
+                linear_x *= 0.7
             if self._reverse_would_approach_human(context):
                 linear_x = 0.0
             return linear_x, angular_z
