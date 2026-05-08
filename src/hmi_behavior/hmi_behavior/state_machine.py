@@ -258,20 +258,21 @@ class BehaviorStateMachine:
                 radius=self._config.human_body_radius,
             )
 
-            projected_depth = abs(context.human.linear_x) * self._config.human_exit_time
+            # Planning blocks the human body plus the forward no-go zone; exit_zone only gates resume.
+            forward_zone_depth = abs(context.human.linear_x) * self._config.human_zone_time
             if context.human.is_moving:
-                projected_depth = max(projected_depth, self._config.human_forward_min_depth)
+                forward_zone_depth = max(forward_zone_depth, self._config.human_forward_min_depth)
 
-            if projected_depth > 0.0:
-                center_x = context.human.x + math.cos(context.human.yaw) * projected_depth * 0.5
-                center_y = context.human.y + math.sin(context.human.yaw) * projected_depth * 0.5
+            if forward_zone_depth > 0.0:
+                center_x = context.human.x + math.cos(context.human.yaw) * forward_zone_depth * 0.5
+                center_y = context.human.y + math.sin(context.human.yaw) * forward_zone_depth * 0.5
                 paint_oriented_box(
                     data,
                     spec,
                     center_x=center_x,
                     center_y=center_y,
                     yaw=context.human.yaw,
-                    size_x=projected_depth,
+                    size_x=forward_zone_depth,
                     size_y=self._config.human_zone_half_width * 2.0,
                 )
 
