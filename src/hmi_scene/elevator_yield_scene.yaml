@@ -24,7 +24,7 @@ models:
     entity_name: human_in_elevator
     mesh_source: human_actor/meshes/walk.dae
     pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
-    linear_speed: 0.30
+    linear_speed: 1.00
     waypoints:
       - [0.000000, 1.200000]
       - [-1.800000, -0.900000]

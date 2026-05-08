@@ -67,7 +67,7 @@ class ActorForwardTestController(Node):
         self._linear_speed = float(
             self.declare_parameter(
                 'linear_speed',
-                0.30,
+                1.00,
                 ParameterDescriptor(description='Forward speed in meters per second for the moving human test.'),
             ).value
         )

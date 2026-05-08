@@ -91,12 +91,12 @@ class BehaviorNode(Node):
     def _declare_and_load_config(self) -> ControllerConfig:
         return ControllerConfig(
             goal_tolerance=self.declare_parameter('goal_tolerance', 0.20).value,
-            max_forward_speed=self.declare_parameter('max_forward_speed', 0.45).value,
+            max_forward_speed=self.declare_parameter('max_forward_speed', 1.20).value,
             max_reverse_speed=self.declare_parameter('max_reverse_speed', 0.25).value,
             max_angular_speed=self.declare_parameter('max_angular_speed', 1.20).value,
             angular_gain=self.declare_parameter('angular_gain', 1.40).value,
             linear_gain=self.declare_parameter('linear_gain', 0.70).value,
-            wait_duration=self.declare_parameter('wait_duration', 1.00).value,
+            wait_duration=self.declare_parameter('wait_duration', 0.20).value,
             safety_radius=self.declare_parameter('safety_radius', 0.80).value,
             human_zone_time=self.declare_parameter('human_zone_time', 1.20).value,
             human_exit_time=self.declare_parameter('human_exit_time', 2.00).value,
