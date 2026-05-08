@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>hmi_gazebo_led</name>
+  <version>0.0.0</version>
+  <description>Gazebo system plugin that renders the HMI LED ring.</description>
+  <maintainer email="li@todo.todo">li</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>gz_msgs_vendor</depend>
+  <depend>gz_plugin_vendor</depend>
+  <depend>gz_sim_vendor</depend>
+  <depend>gz_transport_vendor</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

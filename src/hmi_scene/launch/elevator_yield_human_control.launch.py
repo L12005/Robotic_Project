@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
@@ -12,11 +13,20 @@ def generate_launch_description():
     world_file = Path(get_package_share_directory('hmi_world')) / 'elevator_yield_human_control.world'
     scene_config = Path(get_package_share_directory('hmi_scene')) / 'elevator_yield_human_control_scene.yaml'
     model_path = source_packages_dir / 'hmi_elements'
+    plugin_lib_path = Path(get_package_prefix('hmi_gazebo_led')) / 'lib'
+    existing_resource_path = os.environ.get('GZ_SIM_RESOURCE_PATH', '')
+    existing_plugin_path = os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', '')
+    resource_path = str(model_path) if not existing_resource_path else f'{model_path}:{existing_resource_path}'
+    plugin_path = str(plugin_lib_path) if not existing_plugin_path else f'{plugin_lib_path}:{existing_plugin_path}'
 
     return LaunchDescription([
         SetEnvironmentVariable(
             name='GZ_SIM_RESOURCE_PATH',
-            value=str(model_path),
+            value=resource_path,
+        ),
+        SetEnvironmentVariable(
+            name='GZ_SIM_SYSTEM_PLUGIN_PATH',
+            value=plugin_path,
         ),
         ExecuteProcess(
             cmd=[
@@ -44,6 +54,15 @@ def generate_launch_description():
                 '/human_in_elevator/right_arm_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
                 '/human_in_elevator/left_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
                 '/human_in_elevator/right_leg_joint_cmd@std_msgs/msg/Float64@gz.msgs.Double',
+            ],
+            output='screen',
+        ),
+        Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name='elevator_human_control_led_mode_bridge',
+            arguments=[
+                '/hmi/visual/led_mode@std_msgs/msg/String@gz.msgs.StringMsg',
             ],
             output='screen',
         ),
@@ -122,6 +141,12 @@ def generate_launch_description():
                     'control_rate_hz': 20.0,
                 }
             ],
+            output='screen',
+        ),
+        Node(
+            package='hmi_feedback',
+            executable='behavior_to_led_mode',
+            name='behavior_to_led_mode',
             output='screen',
         ),
         Node(
