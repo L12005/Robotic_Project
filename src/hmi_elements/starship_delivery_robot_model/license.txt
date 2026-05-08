@@ -1,0 +1,11 @@
+Model Information:
+* title:	Starship Delivery Robot Model
+* source:	https://sketchfab.com/3d-models/starship-delivery-robot-model-4aef60939c3743cdbaece6b1e5bda21a
+* author:	Jack Condra (https://sketchfab.com/JackCondra)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Starship Delivery Robot Model" (https://sketchfab.com/3d-models/starship-delivery-robot-model-4aef60939c3743cdbaece6b1e5bda21a) by Jack Condra (https://sketchfab.com/JackCondra) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

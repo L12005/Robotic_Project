@@ -14,9 +14,9 @@ map:
 
 models:
   robot:
-    name: turtlebot3_burger_ir
-    entity_name: turtlebot3_burger_ir
-    command_entity_name: turtlebot3_burger_ir
+    name: starship_delivery_robot_model
+    entity_name: starship_delivery_robot_model
+    command_entity_name: starship_delivery_robot_model
     command_offset: [0.0, 0.0, 1.570796]
     pose: [0.00, -3.00, 0.012, 0.0, 0.0, 1.570796]
   human:

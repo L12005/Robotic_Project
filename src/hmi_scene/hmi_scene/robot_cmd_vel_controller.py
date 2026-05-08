@@ -148,7 +148,7 @@ class RobotCmdVelController(Node):
         if not isinstance(pose, list) or len(pose) < 6:
             raise ValueError('models.robot.pose must contain [x, y, z, roll, pitch, yaw].')
 
-        state_entity_name = str(robot.get('entity_name') or robot.get('name') or 'turtlebot3_burger_ir')
+        state_entity_name = str(robot.get('entity_name') or robot.get('name') or 'starship_delivery_robot_model')
         command_entity_name = str(
             robot.get('command_entity_name') or
             (f'{state_entity_name}_1' if state_entity_name == 'turtlebot3_burger_ir' else state_entity_name)

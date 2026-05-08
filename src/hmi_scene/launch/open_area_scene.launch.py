@@ -29,7 +29,6 @@ def generate_launch_description():
             cmd=[
                 'gz',
                 'sim',
-                '-r',
                 str(world_file),
             ],
             output='screen',
