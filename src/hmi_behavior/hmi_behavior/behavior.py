@@ -161,6 +161,9 @@ class BehaviorNode(Node):
         behavior_msg.reason = output.reason
         behavior_msg.target_linear_x = float(output.target_linear_x)
         behavior_msg.target_angular_z = float(output.target_angular_z)
+        behavior_msg.motion_direction = output.motion_direction
+        behavior_msg.is_resuming = output.is_resuming
+        behavior_msg.avoidance_started_event = output.avoidance_started_event
         self._behavior_state_publisher.publish(behavior_msg)
         self._maybe_log_debug(output, now_sec)
 
@@ -189,6 +192,7 @@ class BehaviorNode(Node):
             f'state={output.behavior_state} internal_state={output.internal_state.value} '
             f'reason={output.reason or "none"} '
             f'cmd=(linear_x={output.target_linear_x:.3f}, angular_z={output.target_angular_z:.3f}) '
+            f'direction={output.motion_direction} resuming={output.is_resuming} '
             f'{robot_text} {goal_text}'
         )
         self._last_debug_log_sec = now_sec

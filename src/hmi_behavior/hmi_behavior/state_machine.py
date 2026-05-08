@@ -31,12 +31,13 @@ from hmi_behavior.scene_classifier import classify_scene
 
 
 class InternalState(str, Enum):
-    IDLE = 'Idle'
-    NAVIGATE = 'Navigate'
-    FORWARD = 'Forward'
-    CONFLICT_AVOIDING_NAVIGATE = 'ConflictAvoidingNavigate'
-    CONFLICT_AVOID = 'ConflictAvoid'
-    WAIT = 'Wait'
+    IDLE = "Idle"
+    NAVIGATE = "Navigate"
+    FORWARD = "Forward"
+    CONFLICT_AVOIDING_NAVIGATE = "ConflictAvoidingNavigate"
+    CONFLICT_AVOID = "ConflictAvoid"
+    WAIT = "Wait"
+    HARD_STOP = "HardStop"
 
 
 @dataclass
@@ -80,6 +81,9 @@ class StateMachineOutput:
     target_angular_z: float
     scene_label: str
     active_target: Optional[MotionTarget]
+    motion_direction: str
+    is_resuming: bool
+    avoidance_started_event: bool
 
 
 @dataclass
@@ -88,13 +92,39 @@ class YieldPlan:
     path: GridPlan
 
 
+# Threshold for angular velocity to distinguish turning from straight motion
+_TURN_ANGULAR_THRESHOLD = 0.15
+
+
+def _determine_motion_direction(target_linear_x: float, target_angular_z: float) -> str:
+    """Determine motion direction from velocity commands.
+
+    Returns one of: forward, backward, left_turn, right_turn, none.
+    """
+    if abs(target_linear_x) < 0.01 and abs(target_angular_z) < 0.01:
+        return "none"
+    if target_linear_x < -0.01:
+        return "backward"
+    if target_angular_z > _TURN_ANGULAR_THRESHOLD:
+        return "left_turn"
+    if target_angular_z < -_TURN_ANGULAR_THRESHOLD:
+        return "right_turn"
+    if target_linear_x > 0.01:
+        return "forward"
+    return "none"
+
+
 class BehaviorStateMachine:
     def __init__(self, config: ControllerConfig) -> None:
         self._config = config
         self._state = InternalState.IDLE
         self._active_target: Optional[MotionTarget] = None
         self._wait_started_at: Optional[float] = None
+        self._hard_stop_started_at: Optional[float] = None
         self._resume_until = 0.0
+        # Avoidance session de-duplication: tracks whether we have already
+        # fired the avoidance-started event for the current pedestrian encounter.
+        self._avoidance_session_active: bool = False
 
     def step(self, context: AggregatedState, now_sec: float) -> StateMachineOutput:
         if self._resume_until > 0.0 and now_sec >= self._resume_until:
@@ -110,7 +140,7 @@ class BehaviorStateMachine:
         if context.robot is None or context.goal is None or base_map is None:
             self._state = InternalState.IDLE
             self._active_target = None
-            return self._output(scene_label, '', 0.0, 0.0, None, now_sec)
+            return self._output(scene_label, "", 0.0, 0.0, None, now_sec)
 
         conflict = assess_conflict(
             context,
@@ -122,17 +152,35 @@ class BehaviorStateMachine:
             reverse_obstacle_half_width=self._config.reverse_obstacle_half_width,
         )
 
+        # --- HardStop exit: 1s elapsed AND circle cleared ---
+        if self._state == InternalState.HARD_STOP and self._hard_stop_started_at is not None:
+            if now_sec - self._hard_stop_started_at >= self._config.wait_duration and not conflict.hard_stop:
+                self._state = InternalState.IDLE
+                self._hard_stop_started_at = None
+
+        # --- HardStop: highest priority once scene inputs are available ---
+        if conflict.hard_stop:
+            if self._state != InternalState.HARD_STOP:
+                self._state = InternalState.HARD_STOP
+                self._hard_stop_started_at = now_sec
+            self._active_target = None
+            return self._output(scene_label, conflict.reason or "human_close", 0.0, 0.0, None, now_sec)
+
+        # --- Wait exit: 1s elapsed (no hard_stop check, it is a separate state now) ---
         if self._state == InternalState.WAIT and self._wait_started_at is not None:
-            if now_sec - self._wait_started_at >= self._config.wait_duration and not conflict.hard_stop:
+            if now_sec - self._wait_started_at >= self._config.wait_duration:
                 self._state = InternalState.IDLE
                 self._wait_started_at = None
 
+        # --- Goal reached ---
         if target_distance(context.robot, context.goal) <= self._config.goal_tolerance:
             self._state = InternalState.IDLE
             self._active_target = None
             self._resume_until = 0.0
-            return self._output(scene_label, '', 0.0, 0.0, None, now_sec)
+            self._avoidance_session_active = False
+            return self._output(scene_label, "", 0.0, 0.0, None, now_sec)
 
+        # --- ConflictAvoid arrival: re-evaluate ---
         if self._state == InternalState.CONFLICT_AVOID and self._active_target is not None:
             if target_distance(context.robot, self._active_target) <= self._config.goal_tolerance:
                 if conflict.exit_zone:
@@ -140,16 +188,13 @@ class BehaviorStateMachine:
                 else:
                     self._state = InternalState.NAVIGATE
                     self._resume_until = now_sec + self._config.resume_duration
+                    # Pedestrian left exit zone -> reset avoidance session
+                    self._avoidance_session_active = False
                 self._active_target = None
 
         planning_map, planning_data = self._build_planning_map(context, base_map)
 
-        if conflict.hard_stop:
-            self._state = InternalState.WAIT
-            self._wait_started_at = now_sec
-            self._active_target = None
-            return self._output(scene_label, conflict.reason or 'human_close', 0.0, 0.0, None, now_sec)
-
+        # --- A* to goal ---
         goal_plan = plan_a_star(
             planning_map,
             planning_data,
@@ -158,11 +203,12 @@ class BehaviorStateMachine:
             threshold=self._config.planner_occupancy_threshold,
         )
 
-        human_related_blocking = conflict.conflict or self._human_is_relevant(context)
-        if goal_plan is None and human_related_blocking:
+        # --- Path unreachable + human conflict -> yield or Wait ---
+        # Issue 9 fix: only use conflict.conflict, removed _human_is_relevant() heuristic
+        if goal_plan is None and conflict.conflict:
             yield_plan = self._plan_yield_path(context, planning_map, planning_data, scene_label)
             if yield_plan is not None:
-                self._state = InternalState.CONFLICT_AVOID
+                avoidance_event = self._enter_conflict_avoid(now_sec)
                 self._active_target = yield_plan.target
                 target_linear_x, target_angular_z = self._command_for_path(
                     context,
@@ -171,21 +217,24 @@ class BehaviorStateMachine:
                 )
                 return self._output(
                     scene_label,
-                    conflict.reason or 'human_close',
+                    conflict.reason or "human_close",
                     target_linear_x,
                     target_angular_z,
                     self._active_target,
                     now_sec,
+                    avoidance_started_override=avoidance_event,
                 )
 
-            self._state = InternalState.CONFLICT_AVOIDING_NAVIGATE
+            # All candidates unreachable -> Wait
+            self._state = InternalState.WAIT
             self._wait_started_at = now_sec
-            return self._output(scene_label, conflict.reason or 'human_close', 0.0, 0.0, None, now_sec)
+            return self._output(scene_label, conflict.reason or "human_close", 0.0, 0.0, None, now_sec)
 
+        # --- Forward no-go zone conflict OR still in ConflictAvoidingNavigate ---
         if conflict.conflict or self._state == InternalState.CONFLICT_AVOIDING_NAVIGATE:
             yield_plan = self._plan_yield_path(context, planning_map, planning_data, scene_label)
             if yield_plan is not None:
-                self._state = InternalState.CONFLICT_AVOID
+                avoidance_event = self._enter_conflict_avoid(now_sec)
                 self._active_target = yield_plan.target
                 target_linear_x, target_angular_z = self._command_for_path(
                     context,
@@ -194,17 +243,20 @@ class BehaviorStateMachine:
                 )
                 return self._output(
                     scene_label,
-                    conflict.reason or 'human_close',
+                    conflict.reason or "human_close",
                     target_linear_x,
                     target_angular_z,
                     self._active_target,
                     now_sec,
+                    avoidance_started_override=avoidance_event,
                 )
 
-            self._state = InternalState.CONFLICT_AVOIDING_NAVIGATE
+            # All candidates unreachable -> Wait
+            self._state = InternalState.WAIT
             self._wait_started_at = now_sec
-            return self._output(scene_label, conflict.reason or 'human_close', 0.0, 0.0, None, now_sec)
+            return self._output(scene_label, conflict.reason or "human_close", 0.0, 0.0, None, now_sec)
 
+        # --- Normal forward navigation ---
         if goal_plan is not None:
             self._state = InternalState.FORWARD
             self._active_target = None
@@ -215,17 +267,28 @@ class BehaviorStateMachine:
             )
             return self._output(scene_label, conflict.reason, target_linear_x, target_angular_z, None, now_sec)
 
+        # --- Path unreachable, no human conflict -> Wait ---
         self._state = InternalState.WAIT
         self._wait_started_at = now_sec
         self._active_target = None
         return self._output(
             scene_label,
-            'obstacle_back' if conflict.obstacle_behind else '',
+            "obstacle_back" if conflict.obstacle_behind else "",
             0.0,
             0.0,
             None,
             now_sec,
         )
+
+    def _enter_conflict_avoid(self, now_sec: float) -> bool:
+        """Transition into ConflictAvoid and return whether this is the first
+        avoidance event for the current pedestrian encounter."""
+        avoidance_event = False
+        if not self._avoidance_session_active:
+            self._avoidance_session_active = True
+            avoidance_event = True
+        self._state = InternalState.CONFLICT_AVOID
+        return avoidance_event
 
     def _build_planning_map(
         self,
@@ -258,7 +321,8 @@ class BehaviorStateMachine:
                 radius=self._config.human_body_radius,
             )
 
-            # Planning blocks the human body plus the forward no-go zone; exit_zone only gates resume.
+            # Planning blocks the human body plus the forward no-go zone;
+            # exit_zone only gates resume.
             forward_zone_depth = abs(context.human.linear_x) * self._config.human_zone_time
             if context.human.is_moving:
                 forward_zone_depth = max(forward_zone_depth, self._config.human_forward_min_depth)
@@ -293,7 +357,7 @@ class BehaviorStateMachine:
             return None
 
         candidates: list[MotionTarget]
-        if scene_label == 'elevator':
+        if scene_label == "elevator":
             candidates = generate_elevator_candidates(
                 context,
                 reverse_distance=self._config.reverse_distance_elevator,
@@ -329,14 +393,12 @@ class BehaviorStateMachine:
             sample_count=max(self._config.yield_sample_count, 12),
         )
         if seed is not None:
-            candidates = [seed] + [candidate for candidate in candidates if distance_xy(candidate.x, candidate.y, seed.x, seed.y) > 0.05]
+            candidates = [seed] + [
+                candidate
+                for candidate in candidates
+                if distance_xy(candidate.x, candidate.y, seed.x, seed.y) > 0.05
+            ]
         return candidates
-
-    def _human_is_relevant(self, context: AggregatedState) -> bool:
-        if context.robot is None or context.human is None:
-            return False
-        local_x, local_y = transform_world_to_local(context.robot, context.human.x, context.human.y)
-        return local_x >= -0.20 and abs(local_y) <= 2.0 and conflict_distance(context) <= 4.0
 
     def _command_for_path(
         self,
@@ -359,7 +421,7 @@ class BehaviorStateMachine:
                 x=lookahead_x,
                 y=lookahead_y,
                 reverse_ok=reverse_ok,
-                source='planned_path',
+                source="planned_path",
             ),
         )
 
@@ -401,34 +463,20 @@ class BehaviorStateMachine:
         target_angular_z: float,
         active_target: Optional[MotionTarget],
         now_sec: float,
+        avoidance_started_override: bool = False,
     ) -> StateMachineOutput:
-        behavior_state = self._behavior_state_label(now_sec)
-        if behavior_state == 'Resume':
-            reason = 'human_passed'
+        is_resuming = self._resume_until > now_sec
+        motion_direction = _determine_motion_direction(target_linear_x, target_angular_z)
 
         return StateMachineOutput(
             internal_state=self._state,
-            behavior_state=behavior_state,
+            behavior_state=self._state.value,
             reason=reason,
             target_linear_x=target_linear_x,
             target_angular_z=target_angular_z,
             scene_label=scene_label,
             active_target=active_target,
+            motion_direction=motion_direction,
+            is_resuming=is_resuming,
+            avoidance_started_event=avoidance_started_override,
         )
-
-    def _behavior_state_label(self, now_sec: float) -> str:
-        if self._resume_until > now_sec:
-            return 'Resume'
-        if self._state == InternalState.CONFLICT_AVOIDING_NAVIGATE:
-            return 'HumanDetected'
-        if self._state == InternalState.CONFLICT_AVOID:
-            return 'YieldBackward'
-        if self._state in (InternalState.IDLE, InternalState.WAIT):
-            return 'Waiting'
-        return 'NormalMove'
-
-
-def conflict_distance(context: AggregatedState) -> float:
-    if context.robot is None or context.human is None:
-        return math.inf
-    return distance_xy(context.robot.x, context.robot.y, context.human.x, context.human.y)
