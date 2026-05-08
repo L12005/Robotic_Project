@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from nav_msgs.msg import OccupancyGrid
 
-from hmi_behavior.robot_state import ActorSnapshot, AggregatedState, GoalSnapshot, cell_is_blocked
+from hmi_behavior.robot_state import ActorSnapshot, AggregatedState, GoalSnapshot, MotionTarget, cell_is_blocked
 from hmi_behavior.state_machine import BehaviorStateMachine, ControllerConfig, InternalState
 
 
@@ -60,8 +60,8 @@ def _config() -> ControllerConfig:
         human_zone_time=1.8,
         human_exit_time=2.4,
         human_zone_half_width=0.5,
-        reverse_distance_elevator=0.9,
-        reverse_distance_open_area=0.55,
+        reverse_distance_elevator=1.2,
+        reverse_distance_open_area=0.75,
         lateral_offset_elevator=0.45,
         lateral_offset_open_area=0.8,
         side_probe_distance=1.0,
@@ -151,3 +151,46 @@ def test_conflict_avoiding_planning_does_not_paint_forward_no_go_zone() -> None:
     machine._state = InternalState.CONFLICT_AVOID
     retreat_map, _ = machine._build_planning_map(context, context.static_map)
     assert not cell_is_blocked(retreat_map, 0.6, 0.0)
+
+
+def test_conflict_is_not_cleared_until_active_yield_target_is_reached() -> None:
+    machine = BehaviorStateMachine(_config())
+    machine._state = InternalState.CONFLICT_AVOID
+    machine._avoidance_session_active = True
+    machine._active_target = MotionTarget(
+        x=-0.9,
+        y=0.0,
+        reverse_ok=True,
+        source="test",
+    )
+
+    context = AggregatedState(
+        robot=_actor(
+            x=0.45,
+            y=0.0,
+            yaw=0.0,
+            linear_x=0.0,
+            nominal_linear_x=0.0,
+            is_moving=False,
+            actor_type="robot",
+        ),
+        human=_actor(
+            x=0.0,
+            y=0.0,
+            yaw=0.0,
+            linear_x=0.2,
+            nominal_linear_x=0.5,
+            is_moving=True,
+            actor_type="human",
+        ),
+        goal=_goal(5.0, 0.0),
+        static_map=_empty_map(),
+    )
+
+    output = machine.step(context, now_sec=1.0)
+
+    assert output.internal_state == InternalState.CONFLICT_AVOID
+    assert output.behavior_state == InternalState.CONFLICT_AVOID.value
+    assert output.reason == "human_close"
+    assert output.active_target == machine._active_target
+    assert output.target_linear_x < 0.0

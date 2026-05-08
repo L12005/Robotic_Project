@@ -203,6 +203,40 @@ class BehaviorStateMachine:
 
         planning_map, planning_data = self._build_planning_map(context, base_map)
 
+        # --- Active yield commitment: finish the current yield target before
+        # clearing the previous conflict session ---
+        if self._state == InternalState.CONFLICT_AVOID and self._active_target is not None:
+            committed_plan = self._plan_path_to_target(
+                context,
+                planning_map,
+                planning_data,
+                self._active_target,
+            )
+            if committed_plan is None:
+                yield_plan = self._plan_yield_path(context, planning_map, planning_data, scene_label)
+                if yield_plan is not None:
+                    self._active_target = yield_plan.target
+                    committed_plan = yield_plan.path
+                else:
+                    self._state = InternalState.WAIT
+                    self._wait_started_at = now_sec
+                    self._active_target = None
+                    return self._output(scene_label, "human_close", 0.0, 0.0, None, now_sec)
+
+            target_linear_x, target_angular_z = self._command_for_path(
+                context,
+                committed_plan,
+                reverse_ok=True,
+            )
+            return self._output(
+                scene_label,
+                "human_close",
+                target_linear_x,
+                target_angular_z,
+                self._active_target,
+                now_sec,
+            )
+
         # --- A* to goal ---
         goal_plan = plan_a_star(
             planning_map,
@@ -398,6 +432,24 @@ class BehaviorStateMachine:
             reverse_distance=self._config.reverse_distance_open_area,
             lateral_offset=self._config.lateral_offset_open_area,
             sample_count=max(self._config.yield_sample_count, 12),
+        )
+
+    def _plan_path_to_target(
+        self,
+        context: AggregatedState,
+        planning_map: OccupancyGrid,
+        planning_data: list[int],
+        target: MotionTarget,
+    ) -> GridPlan | None:
+        if context.robot is None:
+            return None
+
+        return plan_a_star(
+            planning_map,
+            planning_data,
+            start_xy=(context.robot.x, context.robot.y),
+            goal_xy=(target.x, target.y),
+            threshold=self._config.planner_occupancy_threshold,
         )
 
     def _command_for_path(
