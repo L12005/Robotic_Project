@@ -52,8 +52,6 @@ class ControllerConfig:
     human_zone_time: float
     human_exit_time: float
     human_zone_half_width: float
-    reverse_obstacle_distance: float
-    reverse_obstacle_half_width: float
     reverse_distance_elevator: float
     reverse_distance_open_area: float
     lateral_offset_elevator: float
@@ -118,8 +116,6 @@ class BehaviorStateMachine:
             human_zone_time=self._config.human_zone_time,
             human_exit_time=self._config.human_exit_time,
             human_zone_half_width=self._config.human_zone_half_width,
-            reverse_obstacle_distance=self._config.reverse_obstacle_distance,
-            reverse_obstacle_half_width=self._config.reverse_obstacle_half_width,
         )
 
         if self._state == InternalState.WAIT and self._wait_started_at is not None:
@@ -178,7 +174,7 @@ class BehaviorStateMachine:
                     now_sec,
                 )
 
-            self._state = InternalState.CONFLICT_AVOIDING_NAVIGATE
+            self._state = InternalState.WAIT
             self._wait_started_at = now_sec
             return self._output(scene_label, conflict.reason or 'human_close', 0.0, 0.0, None, now_sec)
 
@@ -201,7 +197,7 @@ class BehaviorStateMachine:
                     now_sec,
                 )
 
-            self._state = InternalState.CONFLICT_AVOIDING_NAVIGATE
+            self._state = InternalState.WAIT
             self._wait_started_at = now_sec
             return self._output(scene_label, conflict.reason or 'human_close', 0.0, 0.0, None, now_sec)
 
@@ -220,7 +216,7 @@ class BehaviorStateMachine:
         self._active_target = None
         return self._output(
             scene_label,
-            'obstacle_back' if conflict.obstacle_behind else '',
+            '',
             0.0,
             0.0,
             None,

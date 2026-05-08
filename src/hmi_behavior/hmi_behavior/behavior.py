@@ -101,8 +101,6 @@ class BehaviorNode(Node):
             human_zone_time=self.declare_parameter('human_zone_time', 1.20).value,
             human_exit_time=self.declare_parameter('human_exit_time', 2.00).value,
             human_zone_half_width=self.declare_parameter('human_zone_half_width', 0.50).value,
-            reverse_obstacle_distance=self.declare_parameter('reverse_obstacle_distance', 0.60).value,
-            reverse_obstacle_half_width=self.declare_parameter('reverse_obstacle_half_width', 0.45).value,
             reverse_distance_elevator=self.declare_parameter('reverse_distance_elevator', 0.70).value,
             reverse_distance_open_area=self.declare_parameter('reverse_distance_open_area', 0.55).value,
             lateral_offset_elevator=self.declare_parameter('lateral_offset_elevator', 0.45).value,
