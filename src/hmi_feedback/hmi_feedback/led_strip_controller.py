@@ -280,7 +280,6 @@ class LedStripController(Node):
         if self._gz_node is not None and Visual is not None and Boolean is not None:
             message = Visual()
             message.id = self._visual_ids.get(visual_name, 0)
-            message.name = visual_name
             message.type = Visual.VISUAL
             message.material.ambient.r = red * 0.10
             message.material.ambient.g = green * 0.10
@@ -313,40 +312,39 @@ class LedStripController(Node):
 
         topic = f'/world/{self._world_name}/visual_config'
         visual_id = self._visual_ids.get(visual_name, 0)
-        for request_name in (visual_name,):
-            request = (
-                f'id: {visual_id} name: "{request_name}" type: VISUAL '
-                'material { '
-                f'ambient {{ r: {red * 0.10:.4f} g: {green * 0.10:.4f} b: {blue * 0.10:.4f} a: 1.0 }} '
-                f'diffuse {{ r: {red * diffuse_scale:.4f} g: {green * diffuse_scale:.4f} b: {blue * diffuse_scale:.4f} a: 1.0 }} '
-                f'emissive {{ r: {red * intensity:.4f} g: {green * intensity:.4f} b: {blue * intensity:.4f} a: 1.0 }} '
-                'lighting: true '
-                '}'
-            )
-            command = [
-                'gz',
-                'service',
-                '-s',
-                topic,
-                '--reqtype',
-                'gz.msgs.Visual',
-                '--reptype',
-                'gz.msgs.Boolean',
-                '--timeout',
-                '1000',
-                '--req',
-                request,
-            ]
-            try:
-                result = subprocess.run(command, capture_output=True, text=True, check=False)
-            except FileNotFoundError:
-                self._warn_once('Could not find `gz`; LED strip material updates are disabled until Gazebo is available.')
-                return False
+        request = (
+            f'id: {visual_id} type: VISUAL '
+            'material { '
+            f'ambient {{ r: {red * 0.10:.4f} g: {green * 0.10:.4f} b: {blue * 0.10:.4f} a: 1.0 }} '
+            f'diffuse {{ r: {red * diffuse_scale:.4f} g: {green * diffuse_scale:.4f} b: {blue * diffuse_scale:.4f} a: 1.0 }} '
+            f'emissive {{ r: {red * intensity:.4f} g: {green * intensity:.4f} b: {blue * intensity:.4f} a: 1.0 }} '
+            'lighting: true '
+            '}'
+        )
+        command = [
+            'gz',
+            'service',
+            '-s',
+            topic,
+            '--reqtype',
+            'gz.msgs.Visual',
+            '--reptype',
+            'gz.msgs.Boolean',
+            '--timeout',
+            '1000',
+            '--req',
+            request,
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            self._warn_once('Could not find `gz`; LED strip material updates are disabled until Gazebo is available.')
+            return False
 
-            if result.returncode != 0:
-                detail = (result.stderr or result.stdout).strip()
-                self._warn_once(f'Gazebo visual_config update failed for {visual_name}: {detail}')
-                return False
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            self._warn_once(f'Gazebo visual_config update failed for {visual_name}: {detail}')
+            return False
         return True
 
     def _warn_once(self, message: str) -> None:
