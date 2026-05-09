@@ -4,3 +4,6 @@ string internal_state
 string reason
 float32 target_linear_x
 float32 target_angular_z
+string motion_direction
+bool is_resuming
+bool avoidance_started_event

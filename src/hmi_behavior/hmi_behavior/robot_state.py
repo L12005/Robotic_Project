@@ -17,6 +17,7 @@ class ActorSnapshot:
     y: float
     yaw: float
     linear_x: float
+    nominal_linear_x: float
     angular_z: float
     is_moving: bool
     stamp_sec: float
@@ -31,6 +32,7 @@ class ActorSnapshot:
             y=msg.y,
             yaw=msg.yaw,
             linear_x=msg.linear_x,
+            nominal_linear_x=getattr(msg, 'nominal_linear_x', msg.linear_x),
             angular_z=msg.angular_z,
             is_moving=msg.is_moving,
             stamp_sec=stamp_to_sec(msg.header.stamp.sec, msg.header.stamp.nanosec),
@@ -117,6 +119,12 @@ def distance_xy(ax: float, ay: float, bx: float, by: float) -> float:
 
 def target_distance(robot: ActorSnapshot, target: MotionTarget | GoalSnapshot) -> float:
     return distance_xy(robot.x, robot.y, target.x, target.y)
+
+
+def effective_human_zone_speed(human: ActorSnapshot) -> float:
+    if human.is_moving:
+        return max(abs(human.linear_x), 0.1)
+    return max(0.0, abs(human.nominal_linear_x))
 
 
 def transform_world_to_local(robot: ActorSnapshot, x: float, y: float) -> tuple[float, float]:

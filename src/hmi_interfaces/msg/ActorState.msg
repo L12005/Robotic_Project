@@ -5,5 +5,6 @@ float32 x
 float32 y
 float32 yaw
 float32 linear_x
+float32 nominal_linear_x
 float32 angular_z
 bool is_moving

@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="starship_delivery_robot_model">
+    <static>false</static>
+    <pose>0 0 0 0 0 0</pose>
+
+    <link name="base_link">
+      <collision name="base_collision">
+        <pose>0 0 0.34 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.62 0.68 0.68</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="body_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>scene.gltf</uri>
+            <scale>0.1 0.1 0.1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

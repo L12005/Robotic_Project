@@ -58,9 +58,9 @@
 
     <!-- Open-source robot model from ROBOTIS TurtleBot3 simulations -->
     <include>
-      <uri>model://turtlebot3_burger_ir</uri>
-      <name>turtlebot3_burger_ir</name>
-      <pose>0.00 -4.85 0.012 0 0 1.570796</pose>
+      <uri>model://starship_delivery_robot_model</uri>
+      <name>starship_delivery_robot_model</name>
+      <pose>0.00 -3.00 0.012 0 0 1.570796</pose>
     </include>
 
     <model name="elevator_car">

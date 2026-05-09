@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.7">
-  <world name="open_area">
+  <world name="open_area_human_control">
     <gravity>0 0 -9.8</gravity>
 
     <scene>
@@ -66,7 +66,6 @@
           </inertia>
         </inertial>
         <visual name="torso_visual">
-          <pose>0 0 0 0 0 0</pose>
           <geometry><box><size>0.34 0.22 0.62</size></box></geometry>
           <material><ambient>0.18 0.44 0.74 1</ambient><diffuse>0.24 0.52 0.80 1</diffuse></material>
         </visual>
@@ -86,7 +85,6 @@
           </inertia>
         </inertial>
         <visual name="head_visual">
-          <pose>0 0 0 0 0 0</pose>
           <geometry><sphere><radius>0.11</radius></sphere></geometry>
           <material><ambient>0.86 0.73 0.63 1</ambient><diffuse>0.90 0.78 0.68 1</diffuse></material>
         </visual>
@@ -180,13 +178,8 @@
         <child>left_leg_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.50</lower>
-            <upper>0.50</upper>
-          </limit>
-          <dynamics>
-            <damping>1.0</damping>
-          </dynamics>
+          <limit><lower>-0.50</lower><upper>0.50</upper></limit>
+          <dynamics><damping>1.0</damping></dynamics>
         </axis>
       </joint>
       <joint name="right_leg_joint" type="revolute">
@@ -194,13 +187,8 @@
         <child>right_leg_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.50</lower>
-            <upper>0.50</upper>
-          </limit>
-          <dynamics>
-            <damping>1.0</damping>
-          </dynamics>
+          <limit><lower>-0.50</lower><upper>0.50</upper></limit>
+          <dynamics><damping>1.0</damping></dynamics>
         </axis>
       </joint>
       <joint name="left_arm_joint" type="revolute">
@@ -208,13 +196,8 @@
         <child>left_arm_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.90</lower>
-            <upper>0.90</upper>
-          </limit>
-          <dynamics>
-            <damping>0.8</damping>
-          </dynamics>
+          <limit><lower>-0.90</lower><upper>0.90</upper></limit>
+          <dynamics><damping>0.8</damping></dynamics>
         </axis>
       </joint>
       <joint name="right_arm_joint" type="revolute">
@@ -222,18 +205,11 @@
         <child>right_arm_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.90</lower>
-            <upper>0.90</upper>
-          </limit>
-          <dynamics>
-            <damping>0.8</damping>
-          </dynamics>
+          <limit><lower>-0.90</lower><upper>0.90</upper></limit>
+          <dynamics><damping>0.8</damping></dynamics>
         </axis>
       </joint>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>left_arm_joint</joint_name>
         <topic>/model/pedestrian_1/left_arm_joint_cmd</topic>
         <p_gain>12</p_gain>
@@ -241,9 +217,7 @@
         <cmd_max>20</cmd_max>
         <cmd_min>-20</cmd_min>
       </plugin>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>right_arm_joint</joint_name>
         <topic>/model/pedestrian_1/right_arm_joint_cmd</topic>
         <p_gain>12</p_gain>
@@ -251,9 +225,7 @@
         <cmd_max>20</cmd_max>
         <cmd_min>-20</cmd_min>
       </plugin>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>left_leg_joint</joint_name>
         <topic>/model/pedestrian_1/left_leg_joint_cmd</topic>
         <p_gain>14</p_gain>
@@ -261,9 +233,7 @@
         <cmd_max>20</cmd_max>
         <cmd_min>-20</cmd_min>
       </plugin>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>right_leg_joint</joint_name>
         <topic>/model/pedestrian_1/right_leg_joint_cmd</topic>
         <p_gain>14</p_gain>

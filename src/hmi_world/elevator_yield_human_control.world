@@ -1,6 +1,11 @@
 <?xml version="1.0" ?>
 <sdf version="1.7">
-  <world name="open_area">
+  <world name="elevator_yield_human_control">
+    <physics type="ode">
+      <max_step_size>0.0078125</max_step_size>
+      <real_time_update_rate>128</real_time_update_rate>
+    </physics>
+
     <gravity>0 0 -9.8</gravity>
 
     <scene>
@@ -27,12 +32,12 @@
       <static>true</static>
       <link name="link">
         <collision name="collision">
-          <pose>0 0 -0.03 0 0 0</pose>
-          <geometry><box><size>20 20 0.06</size></box></geometry>
+          <pose>0 -5 -0.03 0 0 0</pose>
+          <geometry><box><size>10 20 0.06</size></box></geometry>
         </collision>
         <visual name="visual">
-          <pose>0 0 -0.03 0 0 0</pose>
-          <geometry><box><size>20 20 0.06</size></box></geometry>
+          <pose>0 -5 -0.03 0 0 0</pose>
+          <geometry><box><size>10 20 0.06</size></box></geometry>
           <material>
             <ambient>0.88 0.88 0.86 1</ambient>
             <diffuse>0.93 0.93 0.90 1</diffuse>
@@ -44,13 +49,56 @@
     <include>
       <uri>model://starship_delivery_robot_model</uri>
       <name>starship_delivery_robot_model</name>
-      <pose>0.00 -9.00 0.012 0 0 1.570796</pose>
-      <static>true</static>
+      <pose>0.00 -3.00 0.012 0 0 1.570796</pose>
     </include>
 
-    <model name="pedestrian_1">
+    <model name="elevator_car">
+      <include>
+        <uri>model://aws_robomaker_hospital_elevator_01_car</uri>
+        <pose>0 1.65 0.19 0 0 0</pose>
+      </include>
+    </model>
+
+    <model name="elevator_portal">
+      <include>
+        <uri>model://aws_robomaker_hospital_elevator_01_portal</uri>
+        <pose>0 1.78 0.19 0 0 0</pose>
+      </include>
+    </model>
+
+    <model name="left_door_side_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>-1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>-1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="right_door_side_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>1.57 1.74 1.45 0 0 0</pose>
+          <geometry><box><size>1.50 0.22 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="human_in_elevator">
       <static>false</static>
-      <pose>0.00 8.20 0.474502 0 0 -1.570796</pose>
+      <pose>0.000004 3.219430 0.474502 0 0 -1.556373</pose>
       <link name="torso_link">
         <gravity>false</gravity>
         <pose>0 0 0.56 0 0 0</pose>
@@ -66,7 +114,6 @@
           </inertia>
         </inertial>
         <visual name="torso_visual">
-          <pose>0 0 0 0 0 0</pose>
           <geometry><box><size>0.34 0.22 0.62</size></box></geometry>
           <material><ambient>0.18 0.44 0.74 1</ambient><diffuse>0.24 0.52 0.80 1</diffuse></material>
         </visual>
@@ -86,7 +133,6 @@
           </inertia>
         </inertial>
         <visual name="head_visual">
-          <pose>0 0 0 0 0 0</pose>
           <geometry><sphere><radius>0.11</radius></sphere></geometry>
           <material><ambient>0.86 0.73 0.63 1</ambient><diffuse>0.90 0.78 0.68 1</diffuse></material>
         </visual>
@@ -180,13 +226,8 @@
         <child>left_leg_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.50</lower>
-            <upper>0.50</upper>
-          </limit>
-          <dynamics>
-            <damping>1.0</damping>
-          </dynamics>
+          <limit><lower>-0.50</lower><upper>0.50</upper></limit>
+          <dynamics><damping>1.0</damping></dynamics>
         </axis>
       </joint>
       <joint name="right_leg_joint" type="revolute">
@@ -194,13 +235,8 @@
         <child>right_leg_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.50</lower>
-            <upper>0.50</upper>
-          </limit>
-          <dynamics>
-            <damping>1.0</damping>
-          </dynamics>
+          <limit><lower>-0.50</lower><upper>0.50</upper></limit>
+          <dynamics><damping>1.0</damping></dynamics>
         </axis>
       </joint>
       <joint name="left_arm_joint" type="revolute">
@@ -208,13 +244,8 @@
         <child>left_arm_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.90</lower>
-            <upper>0.90</upper>
-          </limit>
-          <dynamics>
-            <damping>0.8</damping>
-          </dynamics>
+          <limit><lower>-0.90</lower><upper>0.90</upper></limit>
+          <dynamics><damping>0.8</damping></dynamics>
         </axis>
       </joint>
       <joint name="right_arm_joint" type="revolute">
@@ -222,50 +253,37 @@
         <child>right_arm_link</child>
         <axis>
           <xyz>0 1 0</xyz>
-          <limit>
-            <lower>-0.90</lower>
-            <upper>0.90</upper>
-          </limit>
-          <dynamics>
-            <damping>0.8</damping>
-          </dynamics>
+          <limit><lower>-0.90</lower><upper>0.90</upper></limit>
+          <dynamics><damping>0.8</damping></dynamics>
         </axis>
       </joint>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>left_arm_joint</joint_name>
-        <topic>/model/pedestrian_1/left_arm_joint_cmd</topic>
+        <topic>/human_in_elevator/left_arm_joint_cmd</topic>
         <p_gain>12</p_gain>
         <d_gain>0.8</d_gain>
         <cmd_max>20</cmd_max>
         <cmd_min>-20</cmd_min>
       </plugin>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>right_arm_joint</joint_name>
-        <topic>/model/pedestrian_1/right_arm_joint_cmd</topic>
+        <topic>/human_in_elevator/right_arm_joint_cmd</topic>
         <p_gain>12</p_gain>
         <d_gain>0.8</d_gain>
         <cmd_max>20</cmd_max>
         <cmd_min>-20</cmd_min>
       </plugin>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>left_leg_joint</joint_name>
-        <topic>/model/pedestrian_1/left_leg_joint_cmd</topic>
+        <topic>/human_in_elevator/left_leg_joint_cmd</topic>
         <p_gain>14</p_gain>
         <d_gain>1.0</d_gain>
         <cmd_max>20</cmd_max>
         <cmd_min>-20</cmd_min>
       </plugin>
-      <plugin
-        filename="gz-sim-joint-position-controller-system"
-        name="gz::sim::systems::JointPositionController">
+      <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
         <joint_name>right_leg_joint</joint_name>
-        <topic>/model/pedestrian_1/right_leg_joint_cmd</topic>
+        <topic>/human_in_elevator/right_leg_joint_cmd</topic>
         <p_gain>14</p_gain>
         <d_gain>1.0</d_gain>
         <cmd_max>20</cmd_max>
@@ -273,17 +291,63 @@
       </plugin>
     </model>
 
-    <model name="pedestrian_1_collision_proxy">
+    <model name="human_collision_proxy">
       <static>false</static>
-      <pose>0.00 8.20 0.960000 0 0 -1.570796</pose>
+      <pose>0.000004 3.219430 0.960000 0 0 -1.556373</pose>
       <link name="collision_link">
         <gravity>false</gravity>
-        <collision name="collision">
+        <collision name="body_collision">
           <geometry><box><size>0.95 0.60 1.72</size></box></geometry>
         </collision>
         <visual name="debug_visual">
           <geometry><box><size>0.95 0.60 1.72</size></box></geometry>
-          <material><ambient>0.95 0.45 0.12 0.18</ambient><diffuse>0.95 0.45 0.12 0.18</diffuse></material>
+          <material><ambient>0.2 0.8 0.2 0.35</ambient><diffuse>0.2 0.8 0.2 0.35</diffuse></material>
+          <transparency>0.65</transparency>
+        </visual>
+      </link>
+    </model>
+
+    <model name="left_corridor_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>-2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>-2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="right_corridor_wall">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>2.43 -2.75 1.45 0 0 0</pose>
+          <geometry><box><size>0.22 9.00 2.90</size></box></geometry>
+          <material><ambient>0.82 0.83 0.85 1</ambient><diffuse>0.88 0.89 0.91 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="rear_obstacle">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <pose>1.77 -1.26 0.75 0 0 0</pose>
+          <geometry><box><size>1.10 0.55 1.50</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <pose>1.77 -1.26 0.75 0 0 0</pose>
+          <geometry><box><size>1.10 0.55 1.50</size></box></geometry>
+          <material><ambient>0.65 0.67 0.70 1</ambient><diffuse>0.73 0.75 0.79 1</diffuse></material>
         </visual>
       </link>
     </model>

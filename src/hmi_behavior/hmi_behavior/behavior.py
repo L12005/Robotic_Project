@@ -91,20 +91,18 @@ class BehaviorNode(Node):
     def _declare_and_load_config(self) -> ControllerConfig:
         return ControllerConfig(
             goal_tolerance=self.declare_parameter('goal_tolerance', 0.20).value,
-            max_forward_speed=self.declare_parameter('max_forward_speed', 0.45).value,
-            max_reverse_speed=self.declare_parameter('max_reverse_speed', 0.25).value,
+            max_forward_speed=self.declare_parameter('max_forward_speed', 1.20).value,
+            max_reverse_speed=self.declare_parameter('max_reverse_speed', 1.10).value,
             max_angular_speed=self.declare_parameter('max_angular_speed', 1.20).value,
             angular_gain=self.declare_parameter('angular_gain', 1.40).value,
-            linear_gain=self.declare_parameter('linear_gain', 0.70).value,
-            wait_duration=self.declare_parameter('wait_duration', 1.00).value,
+            linear_gain=self.declare_parameter('linear_gain', 1.50).value,
+            wait_duration=self.declare_parameter('wait_duration', 1.0).value,
             safety_radius=self.declare_parameter('safety_radius', 0.80).value,
-            human_zone_time=self.declare_parameter('human_zone_time', 1.20).value,
-            human_exit_time=self.declare_parameter('human_exit_time', 2.00).value,
-            human_zone_half_width=self.declare_parameter('human_zone_half_width', 0.50).value,
-            reverse_obstacle_distance=self.declare_parameter('reverse_obstacle_distance', 0.60).value,
-            reverse_obstacle_half_width=self.declare_parameter('reverse_obstacle_half_width', 0.45).value,
-            reverse_distance_elevator=self.declare_parameter('reverse_distance_elevator', 0.70).value,
-            reverse_distance_open_area=self.declare_parameter('reverse_distance_open_area', 0.55).value,
+            human_zone_time=self.declare_parameter('human_zone_time', 3.0).value,
+            human_exit_time=self.declare_parameter('human_exit_time', 4.0).value,
+            human_zone_half_width=self.declare_parameter('human_zone_half_width', 0.55).value,
+            reverse_distance_elevator=self.declare_parameter('reverse_distance_elevator', 0.80).value,
+            reverse_distance_open_area=self.declare_parameter('reverse_distance_open_area', 1.60).value,
             lateral_offset_elevator=self.declare_parameter('lateral_offset_elevator', 0.45).value,
             lateral_offset_open_area=self.declare_parameter('lateral_offset_open_area', 0.80).value,
             side_probe_distance=self.declare_parameter('side_probe_distance', 1.00).value,
@@ -161,6 +159,9 @@ class BehaviorNode(Node):
         behavior_msg.reason = output.reason
         behavior_msg.target_linear_x = float(output.target_linear_x)
         behavior_msg.target_angular_z = float(output.target_angular_z)
+        behavior_msg.motion_direction = output.motion_direction
+        behavior_msg.is_resuming = output.is_resuming
+        behavior_msg.avoidance_started_event = output.avoidance_started_event
         self._behavior_state_publisher.publish(behavior_msg)
         self._maybe_log_debug(output, now_sec)
 
@@ -189,6 +190,7 @@ class BehaviorNode(Node):
             f'state={output.behavior_state} internal_state={output.internal_state.value} '
             f'reason={output.reason or "none"} '
             f'cmd=(linear_x={output.target_linear_x:.3f}, angular_z={output.target_angular_z:.3f}) '
+            f'direction={output.motion_direction} resuming={output.is_resuming} '
             f'{robot_text} {goal_text}'
         )
         self._last_debug_log_sec = now_sec

@@ -1,8 +1,9 @@
-scene_name: elevator_yield
+scene_name: elevator_yield_human_control
 description: >
-  Minimal static elevator scene containing only an elevator, one person,
-  one robot, two door-side walls, and a floor plane. There is no ceiling,
-  no dynamic motion, and no control logic in the scene itself.
+  Manual human-control clone of the elevator scene. Geometry, robot start pose,
+  walls, elevator assets, and obstacle layout match the original
+  elevator_yield scene, but the human is intended to be driven by the Xbox
+  set_pose controller instead of the waypoint motion controller.
 
 map:
   resolution: 0.05
@@ -22,13 +23,8 @@ models:
   human:
     name: human_in_elevator
     entity_name: human_in_elevator
-    mesh_source: human_actor/meshes/walk.dae
     pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
-    linear_speed: 1.00
-    waypoints:
-      - [0.000000, 1.200000]
-      - [-1.800000, -0.900000]
-      - [1.800000, -5.100000]
+    linear_speed: 0.50
   elevator_assets:
     - aws_robomaker_hospital_elevator_01_car
     - aws_robomaker_hospital_elevator_01_portal
@@ -73,11 +69,7 @@ models:
       pose: [1.77, -1.26, 0.0, 0.0, 0.0, 0.0]
       size: [1.10, 0.55, 1.50]
       is_static: true
-  upstream_sources:
-    robot: https://github.com/ROBOTIS-GIT/turtlebot3_simulations
-    human_actor_mesh: local human_actor/meshes/walk.dae
 
 notes:
-  - The scene is intentionally static and contains no motion or behavior control.
-  - The two wall panels are coplanar with the elevator sliding door.
-  - The clear spacing between the two wall inner faces is about 1.64 m.
+  - This clone is intended for Xbox/manual human control.
+  - The human position is updated scene-side by the set_pose controller.

@@ -119,7 +119,7 @@ ROS 接口与数据结构
   - string current_state
     - NormalMove / HumanDetected / YieldBackward / Waiting / Resume
   - string reason
-    - human_close / obstacle_back / human_passed
+    - human_close / human_passed
   - float32 target_linear_x
   - float32 target_angular_z
 
@@ -175,7 +175,7 @@ ROS 接口与数据结构
 - /hmi/scene/human_state
   - 发布方：场景/仿真同学
   - 订阅方：控制同学
-  - 用途：把后方静态障碍物的位置发送给状态机，供后退避障判断
+  - 用途：把人的当前位姿和速度发送给状态机，用于人机冲突检测与动态禁行区生成
 - /hmi/scene/map_state
   - 发布方：场景同学
   - 订阅方：控制同学

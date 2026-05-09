@@ -1,8 +1,9 @@
-scene_name: open_area
+scene_name: open_area_human_control
 description: >
-  Open 20x20 floor scene with one robot and one moving pedestrian.
-  There are no walls or elevator assets. The pedestrian collision proxy is the
-  only dynamic obstacles for robot planning.
+  Manual human-control clone of the open area scene. The geometry, robot start
+  pose, goal, and pedestrian collision proxy match the original open_area
+  scene, but the pedestrian is intended to be driven by the Xbox set_pose
+  controller instead of the waypoint motion controller.
 
 map:
   resolution: 0.05
@@ -24,8 +25,6 @@ models:
     entity_name: pedestrian_1
     pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
     linear_speed: 0.32
-    waypoints:
-      - [0.0, -9.0]
   walls: []
   map_static_boxes: []
   obstacles:
@@ -42,8 +41,10 @@ pedestrians:
     pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
     linear_speed: 0.32
     start_delay_sec: 0.0
-    waypoints:
-      - [0.0, -9.0]
 
 goal:
   pose: [0.0, 9.0, 0.0, 0.0, 0.0, 1.570796]
+
+notes:
+  - This clone is intended for Xbox/manual human control.
+  - The pedestrian position is updated scene-side by the set_pose controller.

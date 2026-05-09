@@ -146,7 +146,7 @@ class SceneStatePublisher(Node):
         robot_topic = self.declare_parameter('robot_state_topic', '/hmi/scene/robot_state').value
         robot_odometry_topic = self.declare_parameter(
             'robot_odometry_topic',
-            '/model/turtlebot3_burger_ir/odometry',
+            f'/model/{self._robot_config.entity_name}/odometry',
             ParameterDescriptor(description='Robot odometry topic bridged from Gazebo DiffDrive.'),
         ).value
         human_topic = self.declare_parameter('human_state_topic', '/hmi/scene/human_state').value
@@ -254,15 +254,18 @@ class SceneStatePublisher(Node):
             raise ValueError('models.map_static_boxes must be a list in the scene config.')
 
         robot_config = ActorConfig(
-            entity_name=str(robot.get('entity_name', robot.get('name', 'turtlebot3_burger_ir'))),
-            actor_id=str(robot.get('name', 'turtlebot3_burger_ir')),
+            entity_name=str(robot.get('entity_name', robot.get('name', 'starship_delivery_robot_model'))),
+            actor_id=str(robot.get('name', 'starship_delivery_robot_model')),
             actor_type=str(robot.get('actor_type', 'robot')),
             fallback_pose=self._parse_pose_entry(robot),
             fallback_linear_speed=float(robot.get('linear_speed', 0.0)),
             pose_source_entity_name=str(
                 robot.get(
                     'state_source_entity_name',
-                    robot.get('command_entity_name', robot.get('entity_name', robot.get('name', 'turtlebot3_burger_ir'))),
+                    robot.get(
+                        'command_entity_name',
+                        robot.get('entity_name', robot.get('name', 'starship_delivery_robot_model')),
+                    ),
                 )
             ),
             pose_source_offset=self._parse_xy_yaw_offset(
@@ -936,6 +939,7 @@ class SceneStatePublisher(Node):
             robot_msg.y = robot_pose[1]
             robot_msg.yaw = robot_pose[2]
             robot_msg.linear_x = float(robot_linear_x)
+            robot_msg.nominal_linear_x = float(self._robot_config.fallback_linear_speed)
             robot_msg.angular_z = float(robot_angular_z)
             robot_msg.is_moving = bool(robot_is_moving)
             self._robot_publisher.publish(robot_msg)
@@ -963,6 +967,7 @@ class SceneStatePublisher(Node):
             human_msg.y = human_pose[1]
             human_msg.yaw = human_pose[2]
             human_msg.linear_x = float(human_linear_x)
+            human_msg.nominal_linear_x = float(human_actor.fallback_linear_speed)
             human_msg.angular_z = float(human_angular_z)
             human_msg.is_moving = bool(human_is_moving)
             self._human_publisher.publish(human_msg)

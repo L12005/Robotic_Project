@@ -10,10 +10,15 @@ from typing import Any
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import Twist
 from hmi_interfaces.msg import ActorState
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
+from ros_gz_interfaces.msg import Entity
+from ros_gz_interfaces.srv import SetEntityPose
 
 
 class RobotCmdVelController(Node):
@@ -84,6 +89,7 @@ class RobotCmdVelController(Node):
         ) = self._load_robot_config(scene_config_path)
         self._stats_topic = f'/world/{self._world_name}/stats'
         self._set_pose_service = f'/world/{self._world_name}/set_pose'
+        self._set_pose_client = self.create_client(SetEntityPose, self._set_pose_service)
 
         self._stats_lock = threading.Lock()
         self._pose_lock = threading.Lock()
@@ -91,13 +97,10 @@ class RobotCmdVelController(Node):
         self._stats_reader_process: subprocess.Popen[str] | None = None
         self._stats_reader_thread = threading.Thread(target=self._run_stats_reader, daemon=True)
         self._stats_reader_thread.start()
-        self._command_lock = threading.Lock()
-        self._command_condition = threading.Condition(self._command_lock)
-        self._pending_command_pose: tuple[float, float, float, float] | None = None
-        self._active_command_pose: tuple[float, float, float, float] | None = None
+        self._pending_pose_futures: list[Any] = []
+        self._warned_service_unavailable = False
         self._last_sent_command_pose: tuple[float, float, float, float] | None = None
-        self._command_worker_thread = threading.Thread(target=self._run_command_worker, daemon=True)
-        self._command_worker_thread.start()
+        self._last_requested_command_pose: tuple[float, float, float, float] | None = None
         self._last_cmd_debug_log_sec = 0.0
         self._last_cmd_debug_signature: tuple[float, float] | None = None
         self._last_pose_sync_log_sec = 0.0
@@ -145,7 +148,7 @@ class RobotCmdVelController(Node):
         if not isinstance(pose, list) or len(pose) < 6:
             raise ValueError('models.robot.pose must contain [x, y, z, roll, pitch, yaw].')
 
-        state_entity_name = str(robot.get('entity_name') or robot.get('name') or 'turtlebot3_burger_ir')
+        state_entity_name = str(robot.get('entity_name') or robot.get('name') or 'starship_delivery_robot_model')
         command_entity_name = str(
             robot.get('command_entity_name') or
             (f'{state_entity_name}_1' if state_entity_name == 'turtlebot3_burger_ir' else state_entity_name)
@@ -290,6 +293,10 @@ class RobotCmdVelController(Node):
         if dt <= 0.0:
             return
 
+        self._pending_pose_futures = [future for future in self._pending_pose_futures if not future.done()]
+        if len(self._pending_pose_futures) >= 2:
+            return
+
         now_wall_sec = self.get_clock().now().nanoseconds * 1e-9
         if now_wall_sec - self._last_cmd_wall_time_sec > self._cmd_timeout_sec:
             linear_x = 0.0
@@ -317,9 +324,16 @@ class RobotCmdVelController(Node):
             self._current_y = new_y
             self._current_yaw = new_yaw
 
-        self._queue_entity_pose(new_x, new_y, self._fallback_z, new_yaw)
+        self._set_entity_pose(new_x, new_y, self._fallback_z, new_yaw)
 
-    def _queue_entity_pose(self, x: float, y: float, z: float, yaw: float) -> None:
+    def _set_entity_pose(self, x: float, y: float, z: float, yaw: float) -> None:
+        if not self._set_pose_client.service_is_ready():
+            if not self._warned_service_unavailable:
+                self.get_logger().info(f'Waiting for ROS bridge service {self._set_pose_service}...')
+                self._warned_service_unavailable = True
+            return
+        self._warned_service_unavailable = False
+
         command_yaw = self._normalize_angle(yaw - self._command_offset_yaw)
         offset_world_x = (
             math.cos(command_yaw) * self._command_offset_x -
@@ -333,86 +347,42 @@ class RobotCmdVelController(Node):
         command_y = y - offset_world_y
 
         command_pose = (command_x, command_y, z, command_yaw)
-        with self._command_condition:
-            if self._is_pose_change_small(command_pose, self._last_sent_command_pose):
-                return
-            if self._is_pose_change_small(command_pose, self._active_command_pose):
-                return
-            if self._is_pose_change_small(command_pose, self._pending_command_pose):
-                return
+        if self._is_pose_change_small(command_pose, self._last_sent_command_pose):
+            return
+        if self._is_pose_change_small(command_pose, self._last_requested_command_pose):
+            return
 
-            # Replace any stale pending pose so the worker always sends the newest state.
-            self._pending_command_pose = command_pose
-            self._command_condition.notify()
-
-    def _run_command_worker(self) -> None:
-        while True:
-            with self._command_condition:
-                while self._pending_command_pose is None and not self._stop_event.is_set():
-                    self._command_condition.wait(timeout=0.2)
-
-                if self._pending_command_pose is None and self._stop_event.is_set():
-                    return
-
-                command_pose = self._pending_command_pose
-                self._pending_command_pose = None
-                self._active_command_pose = command_pose
-
-            sent_successfully = self._send_entity_pose(command_pose)
-
-            with self._command_condition:
-                if sent_successfully:
-                    self._last_sent_command_pose = command_pose
-                self._active_command_pose = None
-
-    def _send_entity_pose(self, command_pose: tuple[float, float, float, float]) -> bool:
-        command_x, command_y, z, command_yaw = command_pose
         quaternion = self._quaternion_from_rpy(0.0, 0.0, command_yaw)
-        request_text = (
-            f'name: "{self._command_entity_name}" '
-            f'position {{ x: {command_x:.9f} y: {command_y:.9f} z: {z:.9f} }} '
-            f'orientation {{ x: {quaternion[0]:.9f} y: {quaternion[1]:.9f} '
-            f'z: {quaternion[2]:.9f} w: {quaternion[3]:.9f} }}'
+        request = SetEntityPose.Request()
+        request.entity = Entity(name=self._command_entity_name, type=Entity.MODEL)
+        request.pose = Pose(
+            position=Point(x=command_x, y=command_y, z=z),
+            orientation=Quaternion(
+                x=quaternion[0],
+                y=quaternion[1],
+                z=quaternion[2],
+                w=quaternion[3],
+            ),
         )
-        command = [
-            'gz',
-            'service',
-            '-s',
-            self._set_pose_service,
-            '--reqtype',
-            'gz.msgs.Pose',
-            '--reptype',
-            'gz.msgs.Boolean',
-            '--timeout',
-            '1000',
-            '--req',
-            request_text,
-        ]
+        future = self._set_pose_client.call_async(request)
+        future.add_done_callback(lambda done_future, pose=command_pose: self._on_set_pose_done(done_future, pose))
+        self._pending_pose_futures.append(future)
+        self._last_requested_command_pose = command_pose
+
+    def _on_set_pose_done(self, future: Any, command_pose: tuple[float, float, float, float]) -> None:
         try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=1.2,
-            )
-        except FileNotFoundError:
-            self.get_logger().error('Could not find the `gz` executable needed to move the robot.')
-            return False
-        except subprocess.TimeoutExpired:
-            self.get_logger().warning('Timed out while sending a Gazebo set_pose request for the robot.')
-            return False
+            response = future.result()
+        except Exception as error:
+            self.get_logger().warning(f'Robot set_pose request failed: {error}')
+            self._last_requested_command_pose = None
+            return
 
-        if result.returncode != 0 or 'data: true' not in result.stdout:
-            stderr_text = result.stderr.strip()
-            stdout_text = result.stdout.strip()
-            self.get_logger().warning(
-                'Robot set_pose request failed: '
-                f'code={result.returncode}, stdout="{stdout_text}", stderr="{stderr_text}"'
-            )
-            return False
+        if not response.success:
+            self.get_logger().warning('Robot set_pose request was rejected.')
+            self._last_requested_command_pose = None
+            return
 
-        return True
+        self._last_sent_command_pose = command_pose
 
     def _is_pose_change_small(
         self,
@@ -460,12 +430,8 @@ class RobotCmdVelController(Node):
 
     def destroy_node(self) -> bool:
         self._stop_event.set()
-        with self._command_condition:
-            self._command_condition.notify_all()
         if self._stats_reader_process is not None:
             self._stop_process(self._stats_reader_process)
-        if self._command_worker_thread.is_alive():
-            self._command_worker_thread.join(timeout=2.0)
         if self._stats_reader_thread.is_alive():
             self._stats_reader_thread.join(timeout=2.0)
         return super().destroy_node()
