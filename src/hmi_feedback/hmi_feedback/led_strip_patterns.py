@@ -45,7 +45,7 @@ def build_led_frame(
         enabled = _square_wave(now_sec, hard_stop_fast_blink_hz)
         return _steady_frame('hard_stop', 'none', RED, 1.0 if enabled else 0.08, segment_count)
     if internal_state == 'Wait':
-        return _steady_frame('wait', 'none', GREEN, 0.85, segment_count)
+        return _steady_frame('wait', 'none', GREEN, 1.0, segment_count)
     if internal_state == 'ConflictAvoid':
         if motion_direction == 'backward':
             return _flow_frame('yield_flow', 'backward', now_sec, segment_count, flow_speed_segments_per_sec)
@@ -53,7 +53,7 @@ def build_led_frame(
             return _flow_frame('yield_flow', 'counter_clockwise', now_sec, segment_count, flow_speed_segments_per_sec)
         if motion_direction == 'right_turn':
             return _flow_frame('yield_flow', 'clockwise', now_sec, segment_count, flow_speed_segments_per_sec)
-        return _steady_frame('yield_hold', 'none', GREEN, 0.85, segment_count)
+        return _steady_frame('yield_hold', 'none', GREEN, 1.0, segment_count)
     if internal_state == 'Forward' and is_resuming:
         return _resume_frame(now_sec, resume_start_sec, resume_duration, segment_count)
     if internal_state == 'Idle':

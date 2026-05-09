@@ -9,13 +9,17 @@ from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 
 try:
-    from gz.msgs10.entity_pb2 import Entity
-    from gz.msgs10.material_color_pb2 import MaterialColor
+    from gz.msgs10.boolean_pb2 import Boolean
+    from gz.msgs10.empty_pb2 import Empty
+    from gz.msgs10.scene_pb2 import Scene
+    from gz.msgs10.visual_pb2 import Visual
     from gz.transport13 import Node as GzNode
 except ImportError:  # pragma: no cover - exercised only on non-Gazebo systems
-    Entity = None
+    Boolean = None
+    Empty = None
     GzNode = None
-    MaterialColor = None
+    Scene = None
+    Visual = None
 
 from hmi_feedback.led_strip_patterns import LedFrame, build_led_frame
 
@@ -61,12 +65,13 @@ class LedStripController(Node):
         self._last_segment_keys: list[tuple[float, float, float, float] | None] = [None] * self._segment_count
         self._material_retry_after_sec = 0.0
         self._warned_gz_failure = False
+        self._warned_gz_waiting_for_visual_ids = False
+        self._visual_ids: dict[str, int] = {}
+        self._visual_ids_ready = False
+        self._gz_node = None
         self._gz_publisher = None
-        if GzNode is not None and MaterialColor is not None:
-            self._gz_publisher = GzNode().advertise(
-                f'/world/{self._world_name}/material_color',
-                MaterialColor,
-            )
+        if GzNode is not None:
+            self._gz_node = GzNode()
 
         self.create_subscription(BehaviorState, self._behavior_state_topic, self._on_behavior_state, 20)
         self.create_timer(1.0 / max(self._animation_rate_hz, 1e-6), self._tick)
@@ -135,6 +140,10 @@ class LedStripController(Node):
         self._last_frame_signature = signature
 
     def _publish_frame_to_gazebo(self, frame: LedFrame, now_sec: float) -> None:
+        if not self._material_updates_ready():
+            self._material_retry_after_sec = now_sec + 0.25
+            return
+
         for index, segment in enumerate(frame.segments):
             key = (
                 round(segment.red, 3),
@@ -150,59 +159,134 @@ class LedStripController(Node):
                 self._material_retry_after_sec = now_sec + 1.0
                 return
 
+    def _material_updates_ready(self) -> bool:
+        if self._gz_node is None or Empty is None or Scene is None:
+            return True
+
+        if self._visual_ids_ready:
+            return True
+
+        if self._refresh_visual_ids():
+            self._last_segment_keys = [None] * self._segment_count
+            self._visual_ids_ready = True
+            self.get_logger().info('Resolved Gazebo LED visual ids; refreshing LED strip materials.')
+            return True
+
+        if not self._warned_gz_waiting_for_visual_ids:
+            self.get_logger().info('Waiting for Gazebo scene info before applying LED strip colors.')
+            self._warned_gz_waiting_for_visual_ids = True
+        return False
+
+    def _refresh_visual_ids(self) -> bool:
+        if self._gz_node is None or Empty is None or Scene is None:
+            return False
+
+        try:
+            ok, scene = self._gz_node.request(
+                f'/world/{self._world_name}/scene/info',
+                Empty(),
+                Empty,
+                Scene,
+                1000,
+            )
+        except RuntimeError as exc:
+            self._warn_once(f'Could not query Gazebo scene info: {exc}')
+            return False
+
+        if not ok:
+            return False
+
+        visual_ids: dict[str, int] = {}
+        for model in scene.model:
+            if model.name != self._model_name:
+                continue
+            for link in model.link:
+                if link.name != self._link_name:
+                    continue
+                for visual in link.visual:
+                    if visual.name.startswith('led_segment_'):
+                        visual_ids[visual.name] = int(visual.id)
+
+        expected_names = {f'led_segment_{index:02d}' for index in range(self._segment_count)}
+        if not expected_names.issubset(visual_ids.keys()):
+            return False
+
+        self._visual_ids = visual_ids
+        return True
+
     def _set_segment_material(self, index: int, red: float, green: float, blue: float, intensity: float) -> bool:
-        topic = f'/world/{self._world_name}/material_color'
         visual_name = f'led_segment_{index:02d}'
         diffuse_scale = 0.35 + 0.45 * intensity
-        if self._gz_publisher is not None and MaterialColor is not None and Entity is not None:
-            message = MaterialColor()
-            message.entity.name = visual_name
-            message.entity.type = Entity.VISUAL
-            message.ambient.r = red * 0.10
-            message.ambient.g = green * 0.10
-            message.ambient.b = blue * 0.10
-            message.ambient.a = 1.0
-            message.diffuse.r = red * diffuse_scale
-            message.diffuse.g = green * diffuse_scale
-            message.diffuse.b = blue * diffuse_scale
-            message.diffuse.a = 1.0
-            message.emissive.r = red * intensity
-            message.emissive.g = green * intensity
-            message.emissive.b = blue * intensity
-            message.emissive.a = 1.0
-            message.entity_match = MaterialColor.FIRST
-            if self._gz_publisher.publish(message):
+        if self._gz_node is not None and Visual is not None and Boolean is not None:
+            message = Visual()
+            message.id = self._visual_ids.get(visual_name, 0)
+            message.name = visual_name
+            message.type = Visual.VISUAL
+            message.material.ambient.r = red * 0.10
+            message.material.ambient.g = green * 0.10
+            message.material.ambient.b = blue * 0.10
+            message.material.ambient.a = 1.0
+            message.material.diffuse.r = red * diffuse_scale
+            message.material.diffuse.g = green * diffuse_scale
+            message.material.diffuse.b = blue * diffuse_scale
+            message.material.diffuse.a = 1.0
+            message.material.emissive.r = red * intensity
+            message.material.emissive.g = green * intensity
+            message.material.emissive.b = blue * intensity
+            message.material.emissive.a = 1.0
+            message.material.lighting = True
+            try:
+                ok, response = self._gz_node.request(
+                    f'/world/{self._world_name}/visual_config',
+                    message,
+                    Visual,
+                    Boolean,
+                    1000,
+                )
+            except RuntimeError as exc:
+                self._warn_once(f'Gazebo visual_config request failed for {visual_name}: {exc}')
+                return False
+            if ok and response.data:
                 return True
-            self._warn_once(f'Gazebo material_color publish failed for {visual_name}; will retry.')
+            self._warn_once(f'Gazebo visual_config rejected material update for {visual_name}.')
             return False
 
-        request = (
-            f'entity {{ name: "{visual_name}" type: VISUAL }} '
-            f'ambient {{ r: {red * 0.10:.4f} g: {green * 0.10:.4f} b: {blue * 0.10:.4f} a: 1.0 }} '
-            f'diffuse {{ r: {red * diffuse_scale:.4f} g: {green * diffuse_scale:.4f} b: {blue * diffuse_scale:.4f} a: 1.0 }} '
-            f'emissive {{ r: {red * intensity:.4f} g: {green * intensity:.4f} b: {blue * intensity:.4f} a: 1.0 }} '
-            'entity_match: FIRST'
-        )
-        command = [
-            'gz',
-            'topic',
-            '-t',
-            topic,
-            '-m',
-            'gz.msgs.MaterialColor',
-            '-p',
-            request,
-        ]
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
-        except FileNotFoundError:
-            self._warn_once('Could not find `gz`; LED strip material updates are disabled until Gazebo is available.')
-            return False
+        topic = f'/world/{self._world_name}/visual_config'
+        visual_id = self._visual_ids.get(visual_name, 0)
+        for request_name in (visual_name,):
+            request = (
+                f'id: {visual_id} name: "{request_name}" type: VISUAL '
+                'material { '
+                f'ambient {{ r: {red * 0.10:.4f} g: {green * 0.10:.4f} b: {blue * 0.10:.4f} a: 1.0 }} '
+                f'diffuse {{ r: {red * diffuse_scale:.4f} g: {green * diffuse_scale:.4f} b: {blue * diffuse_scale:.4f} a: 1.0 }} '
+                f'emissive {{ r: {red * intensity:.4f} g: {green * intensity:.4f} b: {blue * intensity:.4f} a: 1.0 }} '
+                'lighting: true '
+                '}'
+            )
+            command = [
+                'gz',
+                'service',
+                '-s',
+                topic,
+                '--reqtype',
+                'gz.msgs.Visual',
+                '--reptype',
+                'gz.msgs.Boolean',
+                '--timeout',
+                '1000',
+                '--req',
+                request,
+            ]
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, check=False)
+            except FileNotFoundError:
+                self._warn_once('Could not find `gz`; LED strip material updates are disabled until Gazebo is available.')
+                return False
 
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            self._warn_once(f'Gazebo visual_config update failed for {visual_name}: {detail}')
-            return False
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout).strip()
+                self._warn_once(f'Gazebo visual_config update failed for {visual_name}: {detail}')
+                return False
         return True
 
     def _warn_once(self, message: str) -> None:

@@ -67,3 +67,45 @@ def test_resume_blends_green_toward_white() -> None:
     assert end.segments[0].red > 0.999
     assert end.segments[0].green > 0.999
     assert end.segments[0].blue > 0.999
+
+
+def test_wait_uses_full_brightness_green_steady() -> None:
+    frame = build_led_frame(
+        internal_state='Wait',
+        motion_direction='none',
+        is_resuming=False,
+        now_sec=0.0,
+        segment_count=24,
+        flow_speed_segments_per_sec=8.0,
+        hard_stop_fast_blink_hz=3.0,
+        resume_duration=1.2,
+        resume_start_sec=None,
+    )
+
+    assert frame is not None
+    assert frame.mode == 'wait'
+    assert all(segment.red == 0.0 for segment in frame.segments)
+    assert all(segment.green == 1.0 for segment in frame.segments)
+    assert all(segment.blue == 0.25 for segment in frame.segments)
+    assert all(segment.intensity == 1.0 for segment in frame.segments)
+
+
+def test_forward_uses_white_steady_without_flow() -> None:
+    frame = build_led_frame(
+        internal_state='Forward',
+        motion_direction='forward',
+        is_resuming=False,
+        now_sec=0.0,
+        segment_count=24,
+        flow_speed_segments_per_sec=8.0,
+        hard_stop_fast_blink_hz=3.0,
+        resume_duration=1.2,
+        resume_start_sec=None,
+    )
+
+    assert frame is not None
+    assert frame.mode == 'normal'
+    assert frame.direction == 'none'
+    assert all(segment.red == 1.0 for segment in frame.segments)
+    assert all(segment.green == 1.0 for segment in frame.segments)
+    assert all(segment.blue == 1.0 for segment in frame.segments)
