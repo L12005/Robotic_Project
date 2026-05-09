@@ -2,7 +2,8 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -10,9 +11,21 @@ def generate_launch_description():
     workspace_root = Path(get_package_prefix('hmi_scene')).parents[1]
     source_packages_dir = workspace_root / 'src'
     world_file = Path(get_package_share_directory('hmi_world')) / 'elevator_yield.world'
+    scene_config = Path(get_package_share_directory('hmi_scene')) / 'elevator_yield_scene.yaml'
+    pedestrian_path_config = Path(get_package_share_directory('hmi_scene')) / 'elevator_yield_pedestrian_paths.yaml'
     model_path = source_packages_dir / 'hmi_elements'
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'pedestrian_path_name',
+            default_value='default',
+            description='Named pedestrian path profile to load for the elevator_yield automatic scene.',
+        ),
+        DeclareLaunchArgument(
+            'pedestrian_path_config_path',
+            default_value=str(pedestrian_path_config),
+            description='YAML file containing pedestrian path profiles for the elevator_yield automatic scene.',
+        ),
         SetEnvironmentVariable(
             name='GZ_SIM_RESOURCE_PATH',
             value=str(model_path),
@@ -52,6 +65,13 @@ def generate_launch_description():
             name='human_motion_controller',
             parameters=[
                 {
+                    'scene_config_path': str(scene_config),
+                    'pedestrian_path_config_path': LaunchConfiguration('pedestrian_path_config_path'),
+                    'pedestrian_path_name': LaunchConfiguration('pedestrian_path_name'),
+                    'world_name': 'elevator_yield',
+                    'visual_entity_name': 'human_in_elevator',
+                    'collision_entity_name': 'human_collision_proxy',
+                    'joint_topic_prefix': '/human_in_elevator',
                     'start_delay_sec': 3.0,
                 }
             ],
@@ -63,6 +83,8 @@ def generate_launch_description():
             name='robot_cmd_vel_controller',
             parameters=[
                 {
+                    'scene_config_path': str(scene_config),
+                    'world_name': 'elevator_yield',
                     'use_robot_state_feedback': False,
                 }
             ],
@@ -98,6 +120,11 @@ def generate_launch_description():
             name='scene_state_publisher',
             parameters=[
                 {
+                    'scene_config_path': str(scene_config),
+                    'pedestrian_path_config_path': LaunchConfiguration('pedestrian_path_config_path'),
+                    'pedestrian_path_name': LaunchConfiguration('pedestrian_path_name'),
+                    'gazebo_pose_topic': '/world/elevator_yield/pose/info',
+                    'gazebo_stats_topic': '/world/elevator_yield/stats',
                     'publish_rate_hz': 20.0,
                     'robot_odometry_topic': '/hmi/scene/robot_odometry',
                 }

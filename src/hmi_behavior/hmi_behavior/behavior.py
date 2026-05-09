@@ -112,7 +112,7 @@ class BehaviorNode(Node):
             lateral_offset_open_area=self.declare_parameter('lateral_offset_open_area', 0.80).value,
             side_probe_distance=self.declare_parameter('side_probe_distance', 1.00).value,
             narrow_width_threshold=self.declare_parameter('narrow_width_threshold', 1.60).value,
-            heading_slow_threshold=self.declare_parameter('heading_slow_threshold', 0.50).value,
+            heading_slow_threshold=self.declare_parameter('heading_slow_threshold', 0.8).value,
             heading_stop_threshold=self.declare_parameter('heading_stop_threshold', 1.20).value,
             resume_duration=self.declare_parameter('resume_duration', 1.20).value,
             path_lookahead_distance=self.declare_parameter('path_lookahead_distance', 0.35).value,

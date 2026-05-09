@@ -1,0 +1,32 @@
+description: >
+  Named pedestrian path profiles for the elevator_yield automatic scene.
+  Use one of these names with:
+  ros2 launch hmi_scene scene_state_publishers.launch.py pedestrian_path_name:=<profile>
+
+profiles:
+  default:
+    pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
+    waypoints:
+      - [0.000000, 1.200000]
+      - [-1.800000, -0.900000]
+      - [1.800000, -5.100000]
+
+  straight_exit:
+    pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.570796]
+    waypoints:
+      - [0.0, 1.4]
+      - [0.0, -5.2]
+
+  left_bypass:
+    pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
+    waypoints:
+      - [-0.9, 1.6]
+      - [-1.8, -0.8]
+      - [-1.2, -4.6]
+
+  right_bypass:
+    pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
+    waypoints:
+      - [0.9, 1.6]
+      - [1.8, -0.8]
+      - [1.2, -4.6]
