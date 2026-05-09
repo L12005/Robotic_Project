@@ -54,6 +54,11 @@ class ControllerConfig:
     human_zone_time: float
     human_exit_time: float
     human_zone_half_width: float
+    human_relevance_distance: float
+    robot_body_size_x: float
+    robot_body_size_y: float
+    human_body_size_x: float
+    human_body_size_y: float
     reverse_distance_elevator: float
     reverse_distance_open_area: float
     lateral_offset_elevator: float
@@ -147,7 +152,22 @@ class BehaviorStateMachine:
             human_zone_time=self._config.human_zone_time,
             human_exit_time=self._config.human_exit_time,
             human_zone_half_width=self._config.human_zone_half_width,
+            human_relevance_distance=self._config.human_relevance_distance,
+            robot_body_size_x=self._config.robot_body_size_x,
+            robot_body_size_y=self._config.robot_body_size_y,
+            human_body_size_x=self._config.human_body_size_x,
+            human_body_size_y=self._config.human_body_size_y,
         )
+
+        if (
+            not conflict.human_relevant
+            and self._state in (InternalState.CONFLICT_AVOIDING_NAVIGATE, InternalState.CONFLICT_AVOID)
+        ):
+            self._state = InternalState.IDLE
+            self._active_target = None
+            self._resume_until = 0.0
+            self._avoidance_session_active = False
+            self._wait_started_at = None
 
         # --- HardStop exit: 1s elapsed AND circle cleared ---
         if self._state == InternalState.HARD_STOP and self._hard_stop_started_at is not None:
@@ -245,10 +265,21 @@ class BehaviorStateMachine:
             goal_xy=(context.goal.x, context.goal.y),
             threshold=self._config.planner_occupancy_threshold,
         )
+        human_blocks_goal = False
+        if goal_plan is None and conflict.human_relevant:
+            human_free_map, human_free_data = self._build_planning_map(context, base_map, include_human=False)
+            human_free_goal_plan = plan_a_star(
+                human_free_map,
+                human_free_data,
+                start_xy=(context.robot.x, context.robot.y),
+                goal_xy=(context.goal.x, context.goal.y),
+                threshold=self._config.planner_occupancy_threshold,
+            )
+            human_blocks_goal = human_free_goal_plan is not None
 
-        # --- Path unreachable + human conflict -> yield or Wait ---
-        # Issue 9 fix: only use conflict.conflict, removed _human_is_relevant() heuristic
-        if goal_plan is None and conflict.conflict:
+        # --- Path unreachable because of the relevant human, or inside the
+        # forward conflict zone -> yield or Wait ---
+        if goal_plan is None and (human_blocks_goal or conflict.conflict):
             yield_plan = self._plan_yield_path(context, planning_map, planning_data, scene_label)
             if yield_plan is not None:
                 avoidance_event = self._enter_conflict_avoid(now_sec)
@@ -333,6 +364,7 @@ class BehaviorStateMachine:
         self,
         context: AggregatedState,
         base_map: OccupancyGrid,
+        include_human: bool = True,
     ) -> tuple[OccupancyGrid, list[int]]:
         data = clone_grid_data(base_map)
         spec = make_grid_spec(base_map)
@@ -351,7 +383,7 @@ class BehaviorStateMachine:
                 inflate_radius=self._config.dynamic_obstacle_inflation,
             )
 
-        if context.human is not None:
+        if include_human and context.human is not None:
             paint_disc(
                 data,
                 spec,
@@ -367,7 +399,7 @@ class BehaviorStateMachine:
                 InternalState.CONFLICT_AVOIDING_NAVIGATE,
                 InternalState.CONFLICT_AVOID,
             )
-            if planning_blocks_forward_zone:
+            if planning_blocks_forward_zone and self._human_zones_are_relevant(context):
                 # exit_zone only gates resume; it is not painted separately.
                 forward_zone_speed = effective_human_zone_speed(context.human)
                 forward_zone_depth = forward_zone_speed * self._config.human_zone_time
@@ -392,6 +424,16 @@ class BehaviorStateMachine:
         planning_map.info = base_map.info
         planning_map.data = list(data)
         return planning_map, data
+
+    def _human_zones_are_relevant(self, context: AggregatedState) -> bool:
+        if context.robot is None or context.human is None:
+            return False
+        return distance_xy(
+            context.robot.x,
+            context.robot.y,
+            context.human.x,
+            context.human.y,
+        ) <= self._config.human_relevance_distance
 
     def _plan_yield_path(
         self,
@@ -491,8 +533,11 @@ class BehaviorStateMachine:
                 min(self._config.max_angular_speed, self._config.angular_gain * heading_error),
             )
             linear_x = -min(self._config.max_reverse_speed, self._config.linear_gain * distance)
+            # Rotate in place first when the retreat target is still far off-axis.
+            # This avoids the initial backing arc that can visually move the robot
+            # toward the human before it has aligned with a safe escape direction.
             if abs(heading_error) > self._config.heading_slow_threshold:
-                linear_x *= 0.7
+                linear_x = 0.0
             if self._reverse_would_approach_human(context):
                 linear_x = 0.0
             return linear_x, angular_z
