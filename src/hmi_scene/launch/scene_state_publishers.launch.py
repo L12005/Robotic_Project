@@ -93,6 +93,18 @@ def generate_launch_description():
             output='screen',
         ),
         Node(
+            package='hmi_feedback',
+            executable='led_strip_controller',
+            name='led_strip_controller',
+            parameters=[
+                {
+                    'world_name': 'elevator_yield',
+                    'segment_count': 24,
+                }
+            ],
+            output='screen',
+        ),
+        Node(
             package='hmi_scene',
             executable='scene_state_publisher',
             name='scene_state_publisher',
