@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - exercised only on non-Gazebo systems
     Visual = None
 
 from hmi_feedback.led_strip_patterns import LedFrame, build_led_frame, select_display_frame
+from hmi_feedback.gazebo_scene_info import parse_visual_ids_from_scene_text
 from hmi_feedback.material_refresh import should_force_material_refresh
 
 
@@ -217,9 +218,6 @@ class LedStripController(Node):
             self._last_full_material_refresh_sec = now_sec
 
     def _material_updates_ready(self, now_sec: float) -> bool:
-        if self._gz_node is None or Empty is None or Scene is None:
-            return True
-
         if self._visual_ids_ready:
             return True
 
@@ -238,6 +236,12 @@ class LedStripController(Node):
         return False
 
     def _refresh_visual_ids(self) -> bool:
+        if self._gz_node is None or Empty is None or Scene is None:
+            return self._refresh_visual_ids_with_cli()
+
+        return self._refresh_visual_ids_with_transport()
+
+    def _refresh_visual_ids_with_transport(self) -> bool:
         if self._gz_node is None or Empty is None or Scene is None:
             return False
 
@@ -267,6 +271,42 @@ class LedStripController(Node):
                     if visual.name.startswith('led_segment_'):
                         visual_ids[visual.name] = int(visual.id)
 
+        expected_names = {f'led_segment_{index:02d}' for index in range(self._segment_count)}
+        if not expected_names.issubset(visual_ids.keys()):
+            return False
+
+        self._visual_ids = visual_ids
+        return True
+
+    def _refresh_visual_ids_with_cli(self) -> bool:
+        command = [
+            'gz',
+            'service',
+            '-s',
+            f'/world/{self._world_name}/scene/info',
+            '--reqtype',
+            'gz.msgs.Empty',
+            '--reptype',
+            'gz.msgs.Scene',
+            '--timeout',
+            '1000',
+            '--req',
+            '',
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            self._warn_once('Could not find `gz`; LED strip material updates are disabled until Gazebo is available.')
+            return False
+
+        if result.returncode != 0:
+            return False
+
+        visual_ids = parse_visual_ids_from_scene_text(
+            result.stdout,
+            model_name=self._model_name,
+            link_name=self._link_name,
+        )
         expected_names = {f'led_segment_{index:02d}' for index in range(self._segment_count)}
         if not expected_names.issubset(visual_ids.keys()):
             return False
@@ -312,6 +352,8 @@ class LedStripController(Node):
 
         topic = f'/world/{self._world_name}/visual_config'
         visual_id = self._visual_ids.get(visual_name, 0)
+        if visual_id <= 0:
+            return False
         request = (
             f'id: {visual_id} type: VISUAL '
             'material { '
