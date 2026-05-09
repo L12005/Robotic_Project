@@ -5,6 +5,7 @@ import math
 import subprocess
 import threading
 import time
+from dataclasses import replace
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Pose
+from hmi_scene.pedestrian_path_profiles import load_pedestrian_path_profile
 from hmi_interfaces.msg import ActorState, ObstacleState
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rcl_interfaces.msg import ParameterDescriptor
@@ -83,6 +85,25 @@ class SceneStatePublisher(Node):
                 ),
             ).value
         )
+        pedestrian_path_config_value = str(
+            self.declare_parameter(
+                'pedestrian_path_config_path',
+                '',
+                ParameterDescriptor(
+                    description='Optional YAML file containing named pedestrian path profiles.'
+                ),
+            ).value
+        ).strip()
+        pedestrian_path_config_path = Path(pedestrian_path_config_value) if pedestrian_path_config_value else None
+        pedestrian_path_name = str(
+            self.declare_parameter(
+                'pedestrian_path_name',
+                '',
+                ParameterDescriptor(
+                    description='Optional pedestrian path profile name to load from pedestrian_path_config_path.'
+                ),
+            ).value
+        ).strip()
         pose_topic = self.declare_parameter(
             'gazebo_pose_topic',
             '/world/elevator_yield/pose/info',
@@ -141,7 +162,11 @@ class SceneStatePublisher(Node):
             self._map_config,
             self._static_boxes,
             self._dynamic_boxes,
-        ) = self._load_scene_config(scene_config_path)
+        ) = self._load_scene_config(
+            scene_config_path,
+            pedestrian_path_config_path,
+            pedestrian_path_name,
+        )
 
         robot_topic = self.declare_parameter('robot_state_topic', '/hmi/scene/robot_state').value
         robot_odometry_topic = self.declare_parameter(
@@ -220,6 +245,8 @@ class SceneStatePublisher(Node):
     def _load_scene_config(
         self,
         scene_config_path: Path,
+        pedestrian_path_config_path: Path | None,
+        pedestrian_path_name: str,
     ) -> tuple[
         ActorConfig,
         ActorConfig,
@@ -289,6 +316,27 @@ class SceneStatePublisher(Node):
         map_config = self._parse_map_config(data.get('map', {}))
 
         obstacle_configs = [self._parse_obstacle(item) for item in obstacles]
+
+        profile = load_pedestrian_path_profile(pedestrian_path_config_path, pedestrian_path_name)
+        if profile is not None and profile.pose is not None:
+            pose = (profile.pose[0], profile.pose[1], profile.pose[5])
+            human_config = replace(human_config, fallback_pose=pose)
+
+            collision_entity_name = ''
+            if pedestrians:
+                first_pedestrian = pedestrians[0]
+                if isinstance(first_pedestrian, dict):
+                    collision_entity_name = str(first_pedestrian.get('collision_entity_name', '')).strip()
+            if collision_entity_name:
+                obstacle_configs = [
+                    replace(obstacle, fallback_pose=pose)
+                    if obstacle.entity_name == collision_entity_name
+                    else obstacle
+                    for obstacle in obstacle_configs
+                ]
+            self.get_logger().info(
+                f'Loaded pedestrian path profile `{pedestrian_path_name}` from {pedestrian_path_config_path}.'
+            )
 
         static_boxes = [
             self._parse_box(

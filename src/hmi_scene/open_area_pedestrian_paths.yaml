@@ -1,0 +1,32 @@
+description: >
+  Named pedestrian path profiles for the open_area automatic scene.
+  Use one of these names with:
+  ros2 launch hmi_scene open_area_scene.launch.py pedestrian_path_name:=<profile>
+
+profiles:
+  default:
+    pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
+    waypoints:
+      - [0.0, -9.0]
+
+  diagonal_crossing:
+    pose: [-3.5, 8.0, 0.474502, 0.0, 0.0, -1.100000]
+    waypoints:
+      - [-1.0, 3.0]
+      - [1.5, -2.0]
+      - [3.5, -8.0]
+
+  left_to_right_crossing:
+    pose: [-8.0, 0.0, 0.474502, 0.0, 0.0, 0.0]
+    waypoints:
+      - [-3.0, 0.0]
+      - [3.0, 0.0]
+      - [8.0, 0.0]
+
+  zigzag:
+    pose: [-6.0, 7.0, 0.474502, 0.0, 0.0, -0.700000]
+    waypoints:
+      - [-3.5, 4.0]
+      - [-1.0, 1.0]
+      - [2.0, -1.5]
+      - [4.5, -5.0]

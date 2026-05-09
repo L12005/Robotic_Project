@@ -13,6 +13,7 @@ from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import Quaternion
+from hmi_scene.pedestrian_path_profiles import load_pedestrian_path_profile
 from ros_gz_interfaces.msg import Entity
 from ros_gz_interfaces.srv import SetEntityPose
 from rcl_interfaces.msg import ParameterDescriptor
@@ -34,6 +35,25 @@ class ActorForwardTestController(Node):
                 ParameterDescriptor(description='Path to the YAML scene config used for the human actor start pose.'),
             ).value
         )
+        pedestrian_path_config_value = str(
+            self.declare_parameter(
+                'pedestrian_path_config_path',
+                '',
+                ParameterDescriptor(
+                    description='Optional YAML file containing named pedestrian path profiles.'
+                ),
+            ).value
+        ).strip()
+        pedestrian_path_config_path = Path(pedestrian_path_config_value) if pedestrian_path_config_value else None
+        pedestrian_path_name = str(
+            self.declare_parameter(
+                'pedestrian_path_name',
+                '',
+                ParameterDescriptor(
+                    description='Optional pedestrian path profile name to load from pedestrian_path_config_path.'
+                ),
+            ).value
+        ).strip()
         self._world_name = str(
             self.declare_parameter(
                 'world_name',
@@ -142,7 +162,11 @@ class ActorForwardTestController(Node):
             self._start_yaw,
             self._collision_z,
             self._waypoints,
-        ) = self._load_scene_poses(scene_config_path)
+        ) = self._load_scene_poses(
+            scene_config_path,
+            pedestrian_path_config_path,
+            pedestrian_path_name,
+        )
         self._set_pose_service = f'/world/{self._world_name}/set_pose'
         self._stats_topic = f'/world/{self._world_name}/stats'
         self._set_pose_client = self.create_client(SetEntityPose, self._set_pose_service)
@@ -185,7 +209,12 @@ class ActorForwardTestController(Node):
             f'waypoints: {len(self._waypoints)}.'
         )
 
-    def _load_scene_poses(self, scene_config_path: Path) -> tuple[float, float, float, float, float, list[tuple[float, float]]]:
+    def _load_scene_poses(
+        self,
+        scene_config_path: Path,
+        pedestrian_path_config_path: Path | None,
+        pedestrian_path_name: str,
+    ) -> tuple[float, float, float, float, float, list[tuple[float, float]]]:
         if not scene_config_path.is_file():
             raise FileNotFoundError(f'Scene config not found: {scene_config_path}')
 
@@ -202,6 +231,16 @@ class ActorForwardTestController(Node):
         if not isinstance(human_pose, list) or len(human_pose) < 6:
             raise ValueError('models.human.pose must contain [x, y, z, roll, pitch, yaw].')
         waypoints = self._parse_waypoints(human, human_pose)
+
+        profile = load_pedestrian_path_profile(pedestrian_path_config_path, pedestrian_path_name)
+        if profile is not None:
+            if profile.pose is not None:
+                human_pose = list(profile.pose)
+            if profile.waypoints is not None:
+                waypoints = profile.waypoints
+            self.get_logger().info(
+                f'Loaded pedestrian path profile `{pedestrian_path_name}` from {pedestrian_path_config_path}.'
+            )
 
         obstacles = models.get('obstacles', [])
         if not isinstance(obstacles, list):

@@ -2,7 +2,8 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -11,6 +12,7 @@ def generate_launch_description():
     source_packages_dir = workspace_root / 'src'
     world_file = Path(get_package_share_directory('hmi_world')) / 'open_area.world'
     scene_config = Path(get_package_share_directory('hmi_scene')) / 'open_area_scene.yaml'
+    pedestrian_path_config = Path(get_package_share_directory('hmi_scene')) / 'open_area_pedestrian_paths.yaml'
     model_path = source_packages_dir / 'hmi_elements'
 
     joint_topics = [
@@ -21,6 +23,16 @@ def generate_launch_description():
     ]
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'pedestrian_path_name',
+            default_value='default',
+            description='Named pedestrian path profile to load for the open-area automatic scene.',
+        ),
+        DeclareLaunchArgument(
+            'pedestrian_path_config_path',
+            default_value=str(pedestrian_path_config),
+            description='YAML file containing pedestrian path profiles for the open-area automatic scene.',
+        ),
         SetEnvironmentVariable(
             name='GZ_SIM_RESOURCE_PATH',
             value=str(model_path),
@@ -56,6 +68,8 @@ def generate_launch_description():
             parameters=[
                 {
                     'scene_config_path': str(scene_config),
+                    'pedestrian_path_config_path': LaunchConfiguration('pedestrian_path_config_path'),
+                    'pedestrian_path_name': LaunchConfiguration('pedestrian_path_name'),
                     'world_name': 'open_area',
                     'visual_entity_name': 'pedestrian_1',
                     'collision_entity_name': 'pedestrian_1_collision_proxy',
@@ -114,6 +128,8 @@ def generate_launch_description():
             parameters=[
                 {
                     'scene_config_path': str(scene_config),
+                    'pedestrian_path_config_path': LaunchConfiguration('pedestrian_path_config_path'),
+                    'pedestrian_path_name': LaunchConfiguration('pedestrian_path_name'),
                     'gazebo_pose_topic': '/world/open_area/pose/info',
                     'gazebo_stats_topic': '/world/open_area/stats',
                     'publish_rate_hz': 20.0,
