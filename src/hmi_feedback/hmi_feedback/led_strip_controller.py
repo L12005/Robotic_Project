@@ -53,6 +53,9 @@ class LedStripController(Node):
         self._flow_speed_segments_per_sec = float(self.declare_parameter('flow_speed_segments_per_sec', 8.0).value)
         self._hard_stop_fast_blink_hz = float(self.declare_parameter('hard_stop_fast_blink_hz', 3.0).value)
         self._resume_duration = float(self.declare_parameter('resume_duration', 1.2).value)
+        self._startup_material_refresh_sec = float(
+            self.declare_parameter('startup_material_refresh_sec', 3.0).value
+        )
         self._enable_runtime_material_updates = bool(
             self.declare_parameter('enable_runtime_material_updates', True).value
         )
@@ -61,9 +64,12 @@ class LedStripController(Node):
         self._last_resuming = False
         self._resume_started_sec: float | None = None
         self._last_internal_state = ''
+        self._last_behavior_signature: tuple[str, str, bool] | None = None
         self._last_frame_signature: tuple[str, str] | None = None
         self._last_segment_keys: list[tuple[float, float, float, float] | None] = [None] * self._segment_count
         self._material_retry_after_sec = 0.0
+        self._force_material_refresh_until_sec = 0.0
+        self._last_forced_material_refresh_sec = 0.0
         self._warned_gz_failure = False
         self._warned_gz_waiting_for_visual_ids = False
         self._visual_ids: dict[str, int] = {}
@@ -84,6 +90,14 @@ class LedStripController(Node):
 
     def _on_behavior_state(self, msg: BehaviorState) -> None:
         now_sec = self.get_clock().now().nanoseconds * 1e-9
+        signature = (msg.internal_state, msg.motion_direction, bool(msg.is_resuming))
+        if signature != self._last_behavior_signature:
+            self._force_material_refresh_until_sec = max(
+                self._force_material_refresh_until_sec,
+                now_sec + self._startup_material_refresh_sec,
+            )
+            self._last_behavior_signature = signature
+
         if msg.is_resuming and not self._last_resuming:
             self._resume_started_sec = now_sec
         elif not msg.is_resuming:
@@ -140,8 +154,16 @@ class LedStripController(Node):
         self._last_frame_signature = signature
 
     def _publish_frame_to_gazebo(self, frame: LedFrame, now_sec: float) -> None:
-        if not self._material_updates_ready():
+        if not self._material_updates_ready(now_sec):
             self._material_retry_after_sec = now_sec + 0.25
+            return
+
+        force_refresh = now_sec < self._force_material_refresh_until_sec
+        if (
+            force_refresh
+            and now_sec - self._last_forced_material_refresh_sec < 0.50
+            and all(key is not None for key in self._last_segment_keys)
+        ):
             return
 
         for index, segment in enumerate(frame.segments):
@@ -151,15 +173,17 @@ class LedStripController(Node):
                 round(segment.blue, 3),
                 round(segment.intensity, 3),
             )
-            if self._last_segment_keys[index] == key:
+            if not force_refresh and self._last_segment_keys[index] == key:
                 continue
             if self._set_segment_material(index, segment.red, segment.green, segment.blue, segment.intensity):
                 self._last_segment_keys[index] = key
             else:
                 self._material_retry_after_sec = now_sec + 1.0
                 return
+        if force_refresh:
+            self._last_forced_material_refresh_sec = now_sec
 
-    def _material_updates_ready(self) -> bool:
+    def _material_updates_ready(self, now_sec: float) -> bool:
         if self._gz_node is None or Empty is None or Scene is None:
             return True
 
@@ -168,6 +192,10 @@ class LedStripController(Node):
 
         if self._refresh_visual_ids():
             self._last_segment_keys = [None] * self._segment_count
+            self._force_material_refresh_until_sec = max(
+                self._force_material_refresh_until_sec,
+                now_sec + self._startup_material_refresh_sec,
+            )
             self._visual_ids_ready = True
             self.get_logger().info('Resolved Gazebo LED visual ids; refreshing LED strip materials.')
             return True

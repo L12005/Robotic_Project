@@ -25,123 +25,123 @@
       </visual>
 
       <visual name="led_segment_00">
-        <pose>0 0 0 0 0 0.000000</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.380000 0.000000 0.530000 0 0 0.000000</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_01">
-        <pose>0 0 0 0 0 0.261799</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.367055 0.098352 0.530000 0 0 0.261799</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_02">
-        <pose>0 0 0 0 0 0.523599</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.329090 0.190000 0.530000 0 0 0.523599</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_03">
-        <pose>0 0 0 0 0 0.785398</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.268701 0.268701 0.530000 0 0 0.785398</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_04">
-        <pose>0 0 0 0 0 1.047198</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.190000 0.329090 0.530000 0 0 1.047198</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_05">
-        <pose>0 0 0 0 0 1.308997</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.098352 0.367055 0.530000 0 0 1.308997</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_06">
-        <pose>0 0 0 0 0 1.570796</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.000000 0.380000 0.530000 0 0 1.570796</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_07">
-        <pose>0 0 0 0 0 1.832596</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.098352 0.367055 0.530000 0 0 1.832596</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_08">
-        <pose>0 0 0 0 0 2.094395</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.190000 0.329090 0.530000 0 0 2.094395</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_09">
-        <pose>0 0 0 0 0 2.356194</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.268701 0.268701 0.530000 0 0 2.356194</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_10">
-        <pose>0 0 0 0 0 2.617994</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.329090 0.190000 0.530000 0 0 2.617994</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_11">
-        <pose>0 0 0 0 0 2.879793</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.367055 0.098352 0.530000 0 0 2.879793</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_12">
-        <pose>0 0 0 0 0 3.141593</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.380000 0.000000 0.530000 0 0 3.141593</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_13">
-        <pose>0 0 0 0 0 3.403392</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.367055 -0.098352 0.530000 0 0 3.403392</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_14">
-        <pose>0 0 0 0 0 3.665191</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.329090 -0.190000 0.530000 0 0 3.665191</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_15">
-        <pose>0 0 0 0 0 3.926991</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.268701 -0.268701 0.530000 0 0 3.926991</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_16">
-        <pose>0 0 0 0 0 4.188790</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.190000 -0.329090 0.530000 0 0 4.188790</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_17">
-        <pose>0 0 0 0 0 4.450590</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>-0.098352 -0.367055 0.530000 0 0 4.450590</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_18">
-        <pose>0 0 0 0 0 4.712389</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.000000 -0.380000 0.530000 0 0 4.712389</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_19">
-        <pose>0 0 0 0 0 4.974188</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.098352 -0.367055 0.530000 0 0 4.974188</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_20">
-        <pose>0 0 0 0 0 5.235988</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.190000 -0.329090 0.530000 0 0 5.235988</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_21">
-        <pose>0 0 0 0 0 5.497787</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.268701 -0.268701 0.530000 0 0 5.497787</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_22">
-        <pose>0 0 0 0 0 5.759587</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.329090 -0.190000 0.530000 0 0 5.759587</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
       <visual name="led_segment_23">
-        <pose>0 0 0 0 0 6.021386</pose>
-        <geometry><mesh><uri>model://starship_delivery_robot_model/meshes/led_strip/led_segment_base.dae</uri></mesh></geometry>
+        <pose>0.367055 -0.098352 0.530000 0 0 6.021386</pose>
+        <geometry><box><size>0.040 0.090 0.060</size></box></geometry>
         <material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.18 0.18 0.18 1</diffuse><emissive>0.08 0.08 0.08 1</emissive></material>
       </visual>
     </link>
