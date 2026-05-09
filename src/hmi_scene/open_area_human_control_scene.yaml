@@ -24,7 +24,7 @@ models:
     name: pedestrian_1
     entity_name: pedestrian_1
     pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
-    linear_speed: 0.32
+    linear_speed: 1.00
   walls: []
   map_static_boxes: []
   obstacles:
@@ -39,7 +39,7 @@ pedestrians:
     entity_name: pedestrian_1
     collision_entity_name: pedestrian_1_collision_proxy
     pose: [0.0, 8.20, 0.474502, 0.0, 0.0, -1.570796]
-    linear_speed: 0.32
+    linear_speed: 1.00
     start_delay_sec: 0.0
 
 goal:

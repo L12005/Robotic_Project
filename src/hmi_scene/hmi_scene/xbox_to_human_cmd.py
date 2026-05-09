@@ -37,7 +37,7 @@ class XboxToHumanCmd(Node):
         self._fixed_speed = float(
             self.declare_parameter(
                 'fixed_speed',
-                0.45,
+                1.0,
                 ParameterDescriptor(description='Fixed walking speed used whenever the left stick leaves the deadzone.'),
             ).value
         )

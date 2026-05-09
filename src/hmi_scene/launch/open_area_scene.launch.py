@@ -60,7 +60,7 @@ def generate_launch_description():
                     'visual_entity_name': 'pedestrian_1',
                     'collision_entity_name': 'pedestrian_1_collision_proxy',
                     'joint_topic_prefix': '/model/pedestrian_1',
-                    'linear_speed': 0.32,
+                    'linear_speed': 1.0,
                     'update_rate_hz': 60.0,
                     'stride_length': 0.62,
                     'arm_swing_amplitude_rad': 0.72,

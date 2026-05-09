@@ -209,7 +209,7 @@ class OpenAreaPedestrianController(Node):
                     collision_entity_name=collision_entity_name,
                     visual_z=float(pose[2]),
                     collision_z=float(collision_pose[2]),
-                    linear_speed=float(pedestrian.get('linear_speed', 0.3)),
+                    linear_speed=float(pedestrian.get('linear_speed', 1.0)),
                     start_delay_sec=float(pedestrian.get('start_delay_sec', 0.0)),
                     current_x=float(pose[0]),
                     current_y=float(pose[1]),

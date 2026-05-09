@@ -49,7 +49,7 @@ def generate_launch_description():
                     'cmd_vel_topic': '/hmi/human/cmd_vel',
                     'listen_host': '0.0.0.0',
                     'listen_port': 8765,
-                    'fixed_speed': 0.45,
+                    'fixed_speed': 1.0,
                     'deadzone': 0.25,
                     'publish_rate_hz': 30.0,
                 }

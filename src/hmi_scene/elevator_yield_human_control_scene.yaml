@@ -24,7 +24,7 @@ models:
     name: human_in_elevator
     entity_name: human_in_elevator
     pose: [0.000004, 3.219430, 0.474502, 0.0, 0.0, -1.556373]
-    linear_speed: 0.50
+    linear_speed: 1.00
   elevator_assets:
     - aws_robomaker_hospital_elevator_01_car
     - aws_robomaker_hospital_elevator_01_portal
