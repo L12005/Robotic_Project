@@ -21,7 +21,8 @@ except ImportError:  # pragma: no cover - exercised only on non-Gazebo systems
     Scene = None
     Visual = None
 
-from hmi_feedback.led_strip_patterns import LedFrame, build_led_frame
+from hmi_feedback.led_strip_patterns import LedFrame, build_led_frame, select_display_frame
+from hmi_feedback.material_refresh import should_force_material_refresh
 
 
 class LedStripController(Node):
@@ -56,6 +57,12 @@ class LedStripController(Node):
         self._startup_material_refresh_sec = float(
             self.declare_parameter('startup_material_refresh_sec', 3.0).value
         )
+        self._startup_material_refresh_interval_sec = float(
+            self.declare_parameter('startup_material_refresh_interval_sec', 0.5).value
+        )
+        self._steady_material_refresh_sec = float(
+            self.declare_parameter('steady_material_refresh_sec', 1.0).value
+        )
         self._enable_runtime_material_updates = bool(
             self.declare_parameter('enable_runtime_material_updates', True).value
         )
@@ -65,11 +72,14 @@ class LedStripController(Node):
         self._resume_started_sec: float | None = None
         self._last_internal_state = ''
         self._last_behavior_signature: tuple[str, str, bool] | None = None
+        self._last_desired_frame: LedFrame | None = None
         self._last_frame_signature: tuple[str, str] | None = None
         self._last_segment_keys: list[tuple[float, float, float, float] | None] = [None] * self._segment_count
         self._material_retry_after_sec = 0.0
         self._force_material_refresh_until_sec = 0.0
         self._last_forced_material_refresh_sec = 0.0
+        self._last_full_material_refresh_sec = 0.0
+        self._initial_material_sync_complete = False
         self._warned_gz_failure = False
         self._warned_gz_waiting_for_visual_ids = False
         self._visual_ids: dict[str, int] = {}
@@ -141,7 +151,16 @@ class LedStripController(Node):
             )
 
         if frame is None:
-            return
+            frame = select_display_frame(
+                frame,
+                self._last_desired_frame,
+                now_sec=now_sec,
+                segment_count=self._segment_count,
+                flow_speed_segments_per_sec=self._flow_speed_segments_per_sec,
+                hard_stop_fast_blink_hz=self._hard_stop_fast_blink_hz,
+                resume_duration=self._resume_duration,
+            )
+        self._last_desired_frame = frame
         self._maybe_log_frame(frame)
         if self._enable_runtime_material_updates and now_sec >= self._material_retry_after_sec:
             self._publish_frame_to_gazebo(frame, now_sec)
@@ -158,10 +177,17 @@ class LedStripController(Node):
             self._material_retry_after_sec = now_sec + 0.25
             return
 
-        force_refresh = now_sec < self._force_material_refresh_until_sec
+        force_refresh = should_force_material_refresh(
+            now_sec=now_sec,
+            initial_sync_complete=self._initial_material_sync_complete,
+            force_refresh_until_sec=self._force_material_refresh_until_sec,
+            last_full_refresh_sec=self._last_full_material_refresh_sec,
+            steady_refresh_sec=self._steady_material_refresh_sec,
+        )
         if (
             force_refresh
-            and now_sec - self._last_forced_material_refresh_sec < 0.50
+            and self._initial_material_sync_complete
+            and now_sec - self._last_forced_material_refresh_sec < self._startup_material_refresh_interval_sec
             and all(key is not None for key in self._last_segment_keys)
         ):
             return
@@ -181,7 +207,14 @@ class LedStripController(Node):
                 self._material_retry_after_sec = now_sec + 1.0
                 return
         if force_refresh:
+            if not self._initial_material_sync_complete:
+                self._initial_material_sync_complete = True
+                self._force_material_refresh_until_sec = max(
+                    self._force_material_refresh_until_sec,
+                    now_sec + self._startup_material_refresh_sec,
+                )
             self._last_forced_material_refresh_sec = now_sec
+            self._last_full_material_refresh_sec = now_sec
 
     def _material_updates_ready(self, now_sec: float) -> bool:
         if self._gz_node is None or Empty is None or Scene is None:
@@ -192,10 +225,9 @@ class LedStripController(Node):
 
         if self._refresh_visual_ids():
             self._last_segment_keys = [None] * self._segment_count
-            self._force_material_refresh_until_sec = max(
-                self._force_material_refresh_until_sec,
-                now_sec + self._startup_material_refresh_sec,
-            )
+            self._initial_material_sync_complete = False
+            self._last_forced_material_refresh_sec = 0.0
+            self._last_full_material_refresh_sec = 0.0
             self._visual_ids_ready = True
             self.get_logger().info('Resolved Gazebo LED visual ids; refreshing LED strip materials.')
             return True

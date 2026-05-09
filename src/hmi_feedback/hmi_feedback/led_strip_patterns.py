@@ -61,6 +61,37 @@ def build_led_frame(
     return _steady_frame('normal', 'none', WHITE, 0.70, segment_count)
 
 
+def select_display_frame(
+    candidate: LedFrame | None,
+    previous: LedFrame | None,
+    *,
+    now_sec: float,
+    segment_count: int,
+    flow_speed_segments_per_sec: float,
+    hard_stop_fast_blink_hz: float,
+    resume_duration: float,
+) -> LedFrame:
+    if candidate is not None:
+        return candidate
+    if previous is not None:
+        return previous
+
+    fallback = build_led_frame(
+        internal_state='ConflictAvoid',
+        motion_direction='none',
+        is_resuming=False,
+        now_sec=now_sec,
+        segment_count=segment_count,
+        flow_speed_segments_per_sec=flow_speed_segments_per_sec,
+        hard_stop_fast_blink_hz=hard_stop_fast_blink_hz,
+        resume_duration=resume_duration,
+        resume_start_sec=None,
+    )
+    if fallback is None:
+        raise RuntimeError('LED startup fallback must produce a display frame')
+    return fallback
+
+
 def _steady_frame(mode: str, direction: str, color: tuple[float, float, float], intensity: float, count: int) -> LedFrame:
     segment = SegmentColor(color[0], color[1], color[2], _clamp01(intensity))
     return LedFrame(mode=mode, direction=direction, segments=tuple(segment for _ in range(count)))
