@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from typing import Optional
 
 import rclpy
-from hmi_interfaces.msg import BehaviorState
+from hmi_interfaces.msg import ActorState, BehaviorState
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 
@@ -24,6 +25,7 @@ except ImportError:  # pragma: no cover - exercised only on non-Gazebo systems
 from hmi_feedback.led_strip_patterns import LedFrame, build_led_frame, select_display_frame
 from hmi_feedback.gazebo_scene_info import parse_visual_ids_from_scene_text
 from hmi_feedback.material_refresh import should_force_material_refresh
+from hmi_feedback.sound_cues import AudioCuePlayer, SoundCueTracker, default_sound_asset_path
 
 
 class LedStripController(Node):
@@ -34,6 +36,11 @@ class LedStripController(Node):
             'behavior_state_topic',
             '/hmi/control/behavior_state',
             ParameterDescriptor(description='BehaviorState topic that drives the feedback LED strip.'),
+        ).value
+        self._human_state_topic = self.declare_parameter(
+            'human_state_topic',
+            '/hmi/scene/human_state',
+            ParameterDescriptor(description='ActorState topic for the currently selected human.'),
         ).value
         self._world_name = self.declare_parameter(
             'world_name',
@@ -67,11 +74,28 @@ class LedStripController(Node):
         self._enable_runtime_material_updates = bool(
             self.declare_parameter('enable_runtime_material_updates', True).value
         )
+        self._enable_audio_cues = bool(
+            self.declare_parameter('enable_audio_cues', True).value
+        )
+        self._soft_sound_path = Path(
+            self.declare_parameter(
+                'soft_sound_path',
+                str(default_sound_asset_path('softsound.mp3')),
+                ParameterDescriptor(description='Path to the short soft cue sound asset.'),
+            ).value
+        ).expanduser()
+        self._warning_sound_path = Path(
+            self.declare_parameter(
+                'warning_sound_path',
+                str(default_sound_asset_path('warning.mp3')),
+                ParameterDescriptor(description='Path to the short hard-stop warning sound asset.'),
+            ).value
+        ).expanduser()
 
         self._latest_msg: BehaviorState | None = None
+        self._latest_human_actor_id = ''
         self._last_resuming = False
         self._resume_started_sec: float | None = None
-        self._last_internal_state = ''
         self._last_behavior_signature: tuple[str, str, bool] | None = None
         self._last_desired_frame: LedFrame | None = None
         self._last_frame_signature: tuple[str, str] | None = None
@@ -90,14 +114,26 @@ class LedStripController(Node):
         if GzNode is not None:
             self._gz_node = GzNode()
 
+        self._sound_cue_tracker = SoundCueTracker()
+        self._audio_cue_player = AudioCuePlayer(
+            logger=self.get_logger(),
+            soft_sound_path=self._soft_sound_path,
+            warning_sound_path=self._warning_sound_path,
+            enabled=self._enable_audio_cues,
+        )
+
+        self.create_subscription(ActorState, self._human_state_topic, self._on_human_state, 20)
         self.create_subscription(BehaviorState, self._behavior_state_topic, self._on_behavior_state, 20)
         self.create_timer(1.0 / max(self._animation_rate_hz, 1e-6), self._tick)
 
         self.get_logger().info(
             'LED strip controller ready. '
             f'world={self._world_name} model={self._model_name} segments={self._segment_count} '
-            f'behavior_topic={self._behavior_state_topic}'
+            f'behavior_topic={self._behavior_state_topic} human_topic={self._human_state_topic}'
         )
+
+    def _on_human_state(self, msg: ActorState) -> None:
+        self._latest_human_actor_id = msg.actor_id.strip()
 
     def _on_behavior_state(self, msg: BehaviorState) -> None:
         now_sec = self.get_clock().now().nanoseconds * 1e-9
@@ -115,12 +151,18 @@ class LedStripController(Node):
             self._resume_started_sec = None
         self._last_resuming = bool(msg.is_resuming)
 
-        if msg.avoidance_started_event:
-            self.get_logger().info('feedback_sound_cue yielding_start_soft_chime')
-        if msg.internal_state == 'HardStop' and self._last_internal_state != 'HardStop':
+        sound_decision = self._sound_cue_tracker.evaluate(
+            internal_state=msg.internal_state,
+            avoidance_started_event=bool(msg.avoidance_started_event),
+            human_actor_id=self._latest_human_actor_id,
+        )
+        if sound_decision.play_soft_chime:
+            actor_id = sound_decision.soft_chime_actor_id or '<unknown>'
+            self.get_logger().info(f'feedback_sound_cue yielding_start_soft_chime actor_id={actor_id}')
+            self._audio_cue_player.enqueue_soft_chime()
+        if sound_decision.play_hard_stop_warning:
             self.get_logger().warning('feedback_sound_cue hard_stop_warning')
-
-        self._last_internal_state = msg.internal_state
+            self._audio_cue_player.enqueue_hard_stop_warning()
         self._latest_msg = msg
 
     def _tick(self) -> None:
@@ -394,6 +436,10 @@ class LedStripController(Node):
             return
         self.get_logger().warning(message)
         self._warned_gz_failure = True
+
+    def destroy_node(self) -> bool:
+        self._audio_cue_player.close()
+        return super().destroy_node()
 
 
 def main(args: Optional[list[str]] = None) -> None:
